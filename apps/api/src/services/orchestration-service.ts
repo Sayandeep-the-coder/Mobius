@@ -402,7 +402,7 @@ export class OrchestrationService {
     if (simResult.status === "SIMULATION_REVERTED") {
       status = "SIMULATION_REVERTED";
       errorMessage = simResult.error?.message ?? "Unknown revert";
-      const selectorMatch = errorMessage.match(/0x[0-9a-fA-F]{8}/);
+      const selectorMatch = (errorMessage || "").match(/0x[0-9a-fA-F]{8}/);
       if (selectorMatch) {
         selector = selectorMatch[0] as `0x${string}`;
       }
@@ -424,7 +424,7 @@ export class OrchestrationService {
         simResult.returnData
       );
 
-      constraintViolations = policyResult.violations.map((v) => v.message);
+      constraintViolations = (policyResult.violations || []).map((v: any) => v.message);
 
       if (!policyResult.passed) {
         status = "BLOCKED_BY_POLICY" as CandidateStatus;
@@ -488,7 +488,7 @@ export class OrchestrationService {
         status = "SIMULATION_REVERTED";
         errorMessage = result.error ?? "Unknown revert";
         // Try to extract 4-byte selector from revert message
-        const selectorMatch = errorMessage.match(/0x[0-9a-fA-F]{8}/);
+        const selectorMatch = (errorMessage || "").match(/0x[0-9a-fA-F]{8}/);
         if (selectorMatch) {
           selector = selectorMatch[0] as `0x${string}`;
         }
@@ -513,7 +513,7 @@ export class OrchestrationService {
         forkResults[forkResults.length - 1]!.returnData
       );
 
-      constraintViolations = policyResult.violations.map((v) => v.message);
+      constraintViolations = (policyResult.violations || []).map((v: any) => v.message);
 
       if (!policyResult.passed) {
         status = "BLOCKED_BY_POLICY" as CandidateStatus;

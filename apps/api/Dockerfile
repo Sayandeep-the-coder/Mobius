@@ -2,17 +2,16 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Install dependencies
+# Copy package files and workspaces
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY packages ./packages
+COPY apps/api ./apps/api
 
-# Copy source code
-COPY . .
-
-# Build TypeScript
-RUN npm run build
+# Install dependencies in api
+WORKDIR /app/apps/api
+RUN npm install --legacy-peer-deps
 
 EXPOSE 8787
+ENV PORT=8787
 
-# Render sets PORT automatically
-CMD ["npm", "start"]
+CMD ["npx", "tsx", "src/server.ts"]

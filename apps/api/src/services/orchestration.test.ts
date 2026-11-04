@@ -125,7 +125,7 @@ describe("OrchestrationService", () => {
     const response = await orchestration.plan(client, request, targetAddress);
 
     expect(response.decision).toBe("HOLD");
-    const swapCandidate = response.candidates.find((c) => c.strategy === "execute_swap");
+    const swapCandidate = response.candidates.find((c: any) => c.strategy === "execute_swap");
     expect(swapCandidate?.status).toBe("SIMULATION_REVERTED");
     expect(swapCandidate?.explanation).toContain("SlippageExceeded");
   });
@@ -157,7 +157,7 @@ describe("OrchestrationService", () => {
     const orchestration = new OrchestrationService();
     const response = await orchestration.plan(client, request, targetAddress);
 
-    const swapCandidate = response.candidates.find((c) => c.strategy === "execute_swap");
+    const swapCandidate = response.candidates.find((c: any) => c.strategy === "execute_swap");
     expect(swapCandidate?.status).toBe("BLOCKED_BY_POLICY");
     expect(swapCandidate?.constraintViolations).toContain(
       "Actual output 50 is below minimum 90"
@@ -190,7 +190,7 @@ describe("OrchestrationService", () => {
     const orchestration = new OrchestrationService();
     const response = await orchestration.plan(client, request, targetAddress);
 
-    const holdCandidate = response.candidates.find((c) => c.strategy === "hold_defer");
+    const holdCandidate = response.candidates.find((c: any) => c.strategy === "hold_defer");
     expect(holdCandidate).toBeDefined();
     expect(holdCandidate?.status).toBe("SIMULATION_PASSED");
     expect(holdCandidate?.encodedCalls).toHaveLength(0);

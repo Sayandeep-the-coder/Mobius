@@ -126,7 +126,7 @@ agenticRoutes.post("/plan", async (req, res) => {
 
     // LLM explains deterministic results (optional, falls back to deterministic explainer)
     const humanExplanation = await createExplainer().explain(
-      response.candidates.map((c) => ({
+      response.candidates.map((c: any) => ({
         candidateId: c.candidateId,
         strategy: c.strategy,
         status: c.status,
@@ -218,7 +218,7 @@ agenticRoutes.post("/plan/natural", async (req, res) => {
 
     // LLM explains deterministic results
     const humanExplanation = await createExplainer().explain(
-      response.candidates.map((c) => ({
+      response.candidates.map((c: any) => ({
         candidateId: c.candidateId,
         strategy: c.strategy,
         status: c.status,

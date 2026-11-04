@@ -63,28 +63,63 @@ async function main() {
     userAddress = getAddress("0x0000000000000000000000000000000000000001");
   }
 
-  const dai = AAVE_SEPOLIA_DAI;
-  const aDai = AAVE_SEPOLIA_ADAI;
-  const supplyAmount = parseUnits("10", 18); // 10 DAI
+  const isLink = process.argv.includes("--link") || process.argv.includes("--asset=link");
+  const assetAddress = isLink
+    ? ("0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5" as const) // LINK
+    : AAVE_SEPOLIA_DAI;
+  const aTokenAddress = isLink
+    ? ("0x3FfAf50D4F4E96eB78f2407c090b72e86eCaed24" as const) // aLINK
+    : AAVE_SEPOLIA_ADAI;
+  const assetSymbol = isLink ? "LINK" : "DAI";
+  const supplyAmount = parseUnits("5", 18); // 5 tokens
 
   console.log(`\n─── Step 1: Checking User Balances & Allowance ───`);
-  const metadata = await client.getAssetMetadata(dai, userAddress);
-  const aDaiBalance = await client.client.readContract({
-    address: aDai,
+  const metadata = await client.getAssetMetadata(assetAddress, userAddress);
+  const aTokenBalance = await client.client.readContract({
+    address: aTokenAddress,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: [userAddress],
   });
 
   console.log(`User Address:      ${userAddress}`);
-  console.log(`DAI Balance:       ${formatUnits(metadata.userBalance, metadata.decimals)} DAI`);
-  console.log(`aDAI Balance:      ${formatUnits(aDaiBalance, 18)} aDAI`);
-  console.log(`Current Allowance: ${formatUnits(metadata.userAllowance, metadata.decimals)} DAI for Pool`);
+  console.log(`Asset:             ${assetSymbol} (${assetAddress})`);
+  console.log(`Balance:           ${formatUnits(metadata.userBalance, metadata.decimals)} ${assetSymbol}`);
+  console.log(`aToken Balance:    ${formatUnits(aTokenBalance, 18)} a${assetSymbol}`);
+  console.log(`Current Allowance: ${formatUnits(metadata.userAllowance, metadata.decimals)} ${assetSymbol} for Pool`);
+
+  // If using LINK and balance is insufficient, auto-mint from faucet
+  if (isLink && account && metadata.userBalance < supplyAmount) {
+    console.log(`\n─── Auto-funding 10 LINK from Aave Sepolia Faucet ───`);
+    const faucetAddress = "0xC959483DBa39aa9E78757139af0e9a2EDEb3f42D" as const;
+    const walletClient = createWalletClient({ account, chain: sepolia, transport: http(rpcUrl) });
+    const mintTx = await walletClient.writeContract({
+      address: faucetAddress,
+      abi: [
+        {
+          name: "mint",
+          type: "function",
+          stateMutability: "nonpayable",
+          inputs: [
+            { name: "token", type: "address" },
+            { name: "to", type: "address" },
+            { name: "amount", type: "uint256" },
+          ],
+          outputs: [{ name: "", type: "uint256" }],
+        },
+      ],
+      functionName: "mint",
+      args: [assetAddress, userAddress, parseUnits("10", 18)],
+    });
+    console.log(`Faucet Mint Tx:    https://sepolia.etherscan.io/tx/${mintTx}`);
+    await client.client.waitForTransactionReceipt({ hash: mintTx });
+    console.log(`✓ 10 LINK received from Faucet!`);
+  }
 
   console.log(`\n─── Step 2: Running Supply Preflight ───`);
   const preflight = await runSupplyPreflight(client, {
     user: userAddress,
-    asset: dai,
+    asset: assetAddress,
     amount: supplyAmount.toString(),
   });
 
@@ -102,9 +137,9 @@ async function main() {
       transport: http(rpcUrl),
     });
 
-    console.log(`Submitting approve(pool, 10 DAI)...`);
+    console.log(`Submitting approve(pool, 5 ${assetSymbol})...`);
     const approveTx = await walletClient.writeContract({
-      address: dai,
+      address: assetAddress,
       abi: erc20Abi,
       functionName: "approve",
       args: [poolAddress, supplyAmount],
@@ -119,20 +154,29 @@ async function main() {
     console.log(`\n─── Step 4: Re-running Preflight With Allowance Granted ───`);
     const rePreflight = await runSupplyPreflight(client, {
       user: userAddress,
-      asset: dai,
+      asset: assetAddress,
       amount: supplyAmount.toString(),
     });
     console.log(`Re-preflight Status:  ${rePreflight.status}`);
     console.log(`Approval Required:    ${rePreflight.approvalRequired}`);
     console.log(`Estimated Gas:        ${rePreflight.gasEstimate}`);
 
+    if (rePreflight.status === "SIMULATION_REVERTED") {
+      console.log(`\n⚠️ MOBIUS DEFENSE ACTIVATED:`);
+      console.log(`  Simulation reverted onchain: ${rePreflight.reason || "Error 51: SUPPLY_CAP_EXCEEDED"}`);
+      console.log(`  Mobius refuses to broadcast an unsafe transaction, saving your gas!`);
+      console.log(`  Tip: Try running with LINK (which has open supply cap):`);
+      console.log(`    npx tsx packages/aave-adapter/src/run-live-sepolia-demo.ts <KEY> --link\n`);
+      return;
+    }
+
     console.log(`\n─── Step 5: Submitting Supply Onchain ───`);
-    console.log(`Submitting supply(DAI, 10, user, 0)...`);
+    console.log(`Submitting supply(${assetSymbol}, 5, user, 0)...`);
     const supplyTx = await walletClient.writeContract({
       address: poolAddress,
       abi: aavePoolAbi,
       functionName: "supply",
-      args: [dai, supplyAmount, userAddress, 0],
+      args: [assetAddress, supplyAmount, userAddress, 0],
     });
     console.log(`Supply Tx Broadcasted: https://sepolia.etherscan.io/tx/${supplyTx}`);
     console.log(`Waiting for receipt...`);
@@ -142,17 +186,39 @@ async function main() {
     console.log(`✓ Supply confirmed in block ${supplyReceipt.blockNumber} (Status: ${supplyReceipt.status})`);
 
     console.log(`\n─── Step 6: Verifying New aToken Balance ───`);
-    const finalADai = await client.client.readContract({
-      address: aDai,
+    const finalAToken = await client.client.readContract({
+      address: aTokenAddress,
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [userAddress],
     });
-    console.log(`Updated aDAI Balance: ${formatUnits(finalADai, 18)} aDAI`);
+    console.log(`Updated a${assetSymbol} Balance: ${formatUnits(finalAToken, 18)} a${assetSymbol}`);
     console.log(`\n🎉 Task 3 Live Sepolia Supply Flow Complete!`);
   } else if (metadata.userAllowance >= supplyAmount) {
-    console.log(`\n✓ Current allowance is sufficient (${formatUnits(metadata.userAllowance, metadata.decimals)} DAI).`);
+    console.log(`\n✓ Current allowance is sufficient (${formatUnits(metadata.userAllowance, metadata.decimals)} ${assetSymbol}).`);
     console.log(`Preflight passed with status: ${preflight.status}`);
+    if (preflight.status === "SIMULATION_PASSED" && account) {
+      console.log(`\n─── Step 5: Submitting Supply Onchain ───`);
+      const walletClient = createWalletClient({ account, chain: sepolia, transport: http(rpcUrl) });
+      const supplyTx = await walletClient.writeContract({
+        address: poolAddress,
+        abi: aavePoolAbi,
+        functionName: "supply",
+        args: [assetAddress, supplyAmount, userAddress, 0],
+      });
+      console.log(`Supply Tx Broadcasted: https://sepolia.etherscan.io/tx/${supplyTx}`);
+      const supplyReceipt = await client.client.waitForTransactionReceipt({ hash: supplyTx });
+      console.log(`✓ Supply confirmed in block ${supplyReceipt.blockNumber} (Status: ${supplyReceipt.status})`);
+
+      const finalAToken = await client.client.readContract({
+        address: aTokenAddress,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [userAddress],
+      });
+      console.log(`Updated a${assetSymbol} Balance: ${formatUnits(finalAToken, 18)} a${assetSymbol}`);
+      console.log(`\n🎉 Task 3 Live Sepolia Supply Flow Complete!`);
+    }
   } else {
     console.log(`\n💡 To execute automated approve & supply, run with your burner private key:`);
     console.log(`   npx tsx packages/aave-adapter/src/run-live-sepolia-demo.ts 0x<YOUR_PRIVATE_KEY>`);

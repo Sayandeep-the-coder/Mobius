@@ -82,3 +82,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial project fork from `monad-developers/monad-blitz-devcon-mumbai`.
 - Devcon Mumbai submission process templates and reference documentation.
+

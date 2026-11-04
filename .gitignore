@@ -31,7 +31,8 @@ cache/
 artifacts/
 broadcast/
 .broadcast/
-lib/
+/contracts/lib/
+!src/lib/
 
 # OS & system files
 .DS_Store

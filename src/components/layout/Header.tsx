@@ -28,13 +28,16 @@ export function Header({ onOpenAuth, onOpenAnalyze }: HeaderProps) {
 
         {/* Center: Navigation Links */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
-          <a href="#product" className="transition hover:text-gray-950">
-            Product
+          <a href="/app" className="transition hover:text-gray-950 font-semibold text-[#836EF9]">
+            Risk Console
           </a>
-          <a href="#how-it-works" className="transition hover:text-gray-950">
+          <a href="/agentic" className="transition hover:text-gray-950">
+            Agentic Planner
+          </a>
+          <a href="/#how-it-works" className="transition hover:text-gray-950">
             How it works
           </a>
-          <a href="#faq" className="transition hover:text-gray-950">
+          <a href="/#faq" className="transition hover:text-gray-950">
             FAQ
           </a>
         </nav>

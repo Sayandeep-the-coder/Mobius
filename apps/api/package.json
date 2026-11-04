@@ -1,0 +1,26 @@
+{
+  "name": "@mobius/api",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mobius agentic transaction intelligence backend (Express)",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc --noEmit",
+    "start": "node dist/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "viem": "^2.21.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^5.1.0",
+    "tsx": "^4.11.0",
+    "typescript": "^5.5.0",
+    "vitest": "^5.1.0"
+  }
+}

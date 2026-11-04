@@ -10,7 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - 2026-11-04
 
 ### Added
-- **Aave V3 Sepolia Protocol Adapter (`@mobius/aave-adapter`)**:
+- **Express API Aave V3 Routing & Preflight Integration (`apps/api`)**:
+  - Connected live `@mobius/aave-adapter` client directly into Express endpoints (`apps/api/src/routes/aave.ts`):
+    - `POST /v1/aave/sepolia/supply/preflight`: Executes token validation, allowance checks, approval calldata generation, and Viem EVM simulation via `runSupplyPreflight`.
+    - `POST /v1/aave/sepolia/withdraw/preflight`: Validates aToken balances and simulates receipt token burn/redemption via `runWithdrawPreflight`.
+    - `GET /v1/aave/sepolia/account/:address`: Queries live user account data (`totalCollateralBase`, `totalDebtBase`, `availableBorrowsBase`, `currentLiquidationThreshold`, `ltv`, `healthFactor`) via `getUserAccountData`.
+  - Added unit test suite in `apps/api/src/routes/aave.test.ts` (3/3 passing tests verifying input validation, bad address handling, and error handling with mock clients).
+  - Enriched `AaveSupplyPreflightResponse` and `AaveWithdrawPreflightResponse` in `packages/contracts-abi/src/aave.ts` with typed `gasEstimate`, `preparedTransaction`, `approvalTransaction`, and `caveat` fields.
+
+- **Aave V3 Sepolia Protocol Adapter (`packages/aave-adapter`)**:
   - Implemented `AaveSepoliaClient` with strict chain verification (`chainId: 11155111` / Ethereum Sepolia) and runtime failure for network mismatches.
   - Dynamic Pool resolution via official `PoolAddressesProvider` (`0x012bAC54348C0E635dCAc9D5FB99f06F24136C9A`), verifying onchain bytecode (`getCode !== "0x"`).
   - Built token metadata reader for `symbol`, `decimals`, `balanceOf`, and `allowance` to prevent floating-point precision loss.
@@ -22,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Simulates `Pool.withdraw` against pinned snapshot state.
   - Automated acceptance test suite in `packages/aave-adapter/test/aave-adapter.test.ts` (6/6 passing tests covering address validation, allowance gates, and simulation paths).
 
-- **Typewriter Mutation Execution Adapter & POC (`@mobius/typewriter-poc`)**:
+- **Typewriter Mutation Execution Adapter & POC (`apps/typewriter-poc`)**:
   - Configured Monad Testnet (`chainId: 10143`, block polling 200ms, FIFO ordering, submit interval 300ms) and local Anvil environments.
   - Built `TypewriterAdapter` tracking the complete mutation lifecycle:
     - `RECEIVED`: Server receives user-signed mutation.
@@ -38,7 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Official address registry from the Aave V3 Sepolia Address Book.
   - Step-by-step wallet interaction runbooks and acceptance checklist.
 
+- **Post-Handover Task Runbook (`docs/post-handover-tasks.md`)**:
+  - Step-by-step verification checklist for smart contract deployment artifacts from Lead / Teammate 1.
+  - Monad testnet explorer inspection guide for `MockSwapTarget` and `LiquidationBufferPool`.
+  - Live Sepolia Aave interaction procedure and test recording schema.
+
 ### Changed
+- Resolved monorepo Viem dependency version conflicts by standardizing on `viem@^2.21.0` in root `package.json` and eliminating duplicate sub-package lockfile variants.
+- Configured path aliases in `apps/api/tsconfig.json` and `apps/api/vitest.config.ts` to include `@mobius/aave-adapter` and `@mobius/llm-adapter`.
+- Resolved TypeScript strict null checks and interface alignments in `@mobius/llm-adapter`.
 - Configured root `tsconfig.json` to exclude sub-packages (`packages/**`, `apps/**`) so that sub-packages utilize independent `ES2022` compiler targets with native BigInt support while keeping the Next.js root configuration unaffected.
 
 ---
@@ -82,4 +98,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial project fork from `monad-developers/monad-blitz-devcon-mumbai`.
 - Devcon Mumbai submission process templates and reference documentation.
-

@@ -1,0 +1,12 @@
+{
+  "name": "@mobius/chain-config",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "viem": "^2.57.16"
+  }
+}

@@ -154,12 +154,12 @@ flowchart TD
 ```
 mobius/
 ├── apps/
-│   ├── api/                 # Fastify backend (Agent A / Lead)
+│   ├── api/                 # Express backend (Agent A / Lead)
 │   │   ├── src/
 │   │   │   ├── server.ts
-│   │   │   ├── routes/      # health, chains, preflight, agentic, execution, aave
-│   │   │   └── services/    # preflight-service, error-classifier, orchestration-service
-│   │   └── package.json
+│   │   │   ├── routes/      # health.ts, chains.ts, preflight.ts, agentic.ts, execution.ts, aave.ts
+│   │   │   └── package.json
+│   │   └── tsconfig.json
 │   └── typewriter-poc/      # Thin Typewriter adapter / isolated runner (Agent C)
 ├── contracts/
 │   ├── foundry.toml
@@ -435,7 +435,7 @@ npm run lint
 - Node.js 22 LTS+
 - Bun (Typewriter monorepo uses Bun workspaces)
 - Foundry (forge, cast, anvil) with Monad support
-- TypeScript, Fastify, Viem, Zod
+- TypeScript, Express, Viem, Zod
 - Docker Desktop (optional; PostgreSQL for Typewriter)
 - Rabby or MetaMask wallet
 

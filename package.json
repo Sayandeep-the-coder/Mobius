@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:contracts": "cd contracts && forge test -vvv",
+    "test:integration": "node scripts/test-monad-integration.mjs"
   },
   "dependencies": {
     "framer-motion": "^14.9.0",

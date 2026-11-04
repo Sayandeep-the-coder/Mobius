@@ -15,12 +15,7 @@ contract MockSwapTarget {
     error SlippageExceeded(uint256 actualOut, uint256 minOut);
 
     event RateUpdated(uint256 oldRate, uint256 newRate);
-    event SimulatedSwap(
-        address indexed trader,
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 minOut
-    );
+    event SimulatedSwap(address indexed trader, uint256 amountIn, uint256 amountOut, uint256 minOut);
 
     constructor() {
         owner = msg.sender;
@@ -38,10 +33,7 @@ contract MockSwapTarget {
         return (amountIn * rateWad) / 1e18;
     }
 
-    function swap(uint256 amountIn, uint256 minOut)
-        external
-        returns (uint256 amountOut)
-    {
+    function swap(uint256 amountIn, uint256 minOut) external returns (uint256 amountOut) {
         if (amountIn == 0) revert InvalidAmount();
         amountOut = quote(amountIn);
         if (amountOut < minOut) revert SlippageExceeded(amountOut, minOut);

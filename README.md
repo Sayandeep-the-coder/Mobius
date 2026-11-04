@@ -315,9 +315,19 @@ forge verify-contract \
   --chain 10143 \
   --verifier sourcify \
   --verifier-url https://sourcify-api-monad.blockvision.org
-
-# 4. Deployment record saved in deployments/monad-testnet.json
 ```
+
+### Live Monad Testnet Deployment (Verified)
+- **Contract Address:** `0xA64c3bA49910baa01515360278AA2542AaAD0219`
+- **Deployer / Owner:** `0x2345ff8Ca8cf8c504F01d26F7064Ef7cb31Dc75D`
+- **Transaction Hash:** `0x465de4362c59dbbb9b4f4e6e489e5d34ab17cfe32bdde8c9f13f6a73a5bcc02e`
+- **Block:** `76872485`
+- **Sourcify Verification Job:** `23496e23-5297-41f3-89ca-fe5019fb0318`
+- **Monad Explorer:** [View on Monadscan](https://testnet.monadscan.com/address/0xA64c3bA49910baa01515360278AA2542AaAD0219)
+- **Run Live Integration Suite:**
+  ```bash
+  npm run test:integration
+  ```
 
 ## Aave V3 Sepolia Integration
 

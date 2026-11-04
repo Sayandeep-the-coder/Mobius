@@ -11,12 +11,7 @@ contract MockSwapTargetTest is Test {
     address public attacker;
 
     event RateUpdated(uint256 oldRate, uint256 newRate);
-    event SimulatedSwap(
-        address indexed trader,
-        uint256 amountIn,
-        uint256 amountOut,
-        uint256 minOut
-    );
+    event SimulatedSwap(address indexed trader, uint256 amountIn, uint256 amountOut, uint256 minOut);
 
     function setUp() public {
         owner = address(this);

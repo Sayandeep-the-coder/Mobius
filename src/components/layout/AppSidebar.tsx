@@ -109,14 +109,15 @@ export function AppSidebar({
           <nav className="flex flex-col gap-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === '/app' && activeSection === item.id;
+              const isDashboardRoute = pathname === '/dashboard' || pathname === '/app';
+              const isActive = isDashboardRoute && activeSection === item.id;
               return (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => {
-                    if (pathname !== '/app') {
-                      window.location.href = `/app?section=${item.id}`;
+                    if (!isDashboardRoute) {
+                      window.location.href = `/dashboard?section=${item.id}`;
                     } else {
                       onSelectSection(item.id);
                     }

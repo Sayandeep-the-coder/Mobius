@@ -13,10 +13,10 @@ import { AuthModal } from '@/components/modals/AuthModal';
 
 export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalTab, setModalTab] = useState<'analyze' | 'login'>('analyze');
+  const [modalTab, setModalTab] = useState<'wallet' | 'analyze' | 'login'>('wallet');
 
-  const handleOpenAuth = (tab: 'login' | 'signup') => {
-    setModalTab(tab === 'login' ? 'login' : 'analyze');
+  const handleOpenAuth = (tab: 'login' | 'signup' | 'wallet') => {
+    setModalTab(tab === 'login' ? 'wallet' : 'analyze');
     setModalOpen(true);
   };
 

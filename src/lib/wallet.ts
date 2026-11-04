@@ -209,3 +209,4 @@ export function disconnectWallet(): void {
     localStorage.removeItem('mobius_wallet_connected');
   }
 }
+

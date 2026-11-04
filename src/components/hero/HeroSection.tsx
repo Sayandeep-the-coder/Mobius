@@ -63,10 +63,10 @@ export function HeroSection({ onOpenAnalyze }: HeroSectionProps) {
           >
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
               <a
-                href="/app"
+                href="/dashboard"
                 className="relative flex shrink-0 items-center justify-center font-semibold leading-none tracking-tight transition-all duration-150 active:scale-[0.97] outline-offset-2 focus-visible:outline-2 h-12 rounded-xl px-6 text-base bg-[#836EF9] text-white hover:bg-[#6E54FF] shadow-lg shadow-[#836EF9]/30 cursor-pointer"
               >
-                Launch App Console →
+                Launch Dashboard →
               </a>
               <button
                 type="button"

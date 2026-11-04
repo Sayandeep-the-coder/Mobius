@@ -327,7 +327,7 @@ export default function AgenticPage() {
         {/* Link back to App */}
         <div className="p-3 border-b border-white/5">
           <Link
-            href="/app"
+            href="/dashboard"
             className="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-gray-300 hover:bg-white/5 hover:text-white transition cursor-pointer"
           >
             <div className="flex items-center gap-3">
@@ -445,7 +445,7 @@ export default function AgenticPage() {
 
             <div className="flex items-center gap-3">
               <Link
-                href="/app"
+                href="/dashboard"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition border border-white/10 cursor-pointer"
               >
                 <LayoutDashboard className="size-3.5 text-[#A594FD]" />

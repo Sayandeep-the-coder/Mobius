@@ -1,9 +1,9 @@
 {
-  "name": "mobious",
+  "name": "mobius",
   "version": "1.0.0",
   "private": true,
   "workspaces": [
-    "apps/api",
+    "apps/*",
     "packages/*"
   ],
   "scripts": {
@@ -11,17 +11,24 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "dev:api": "cd apps/api && npm run dev",
+    "build:api": "cd apps/api && npm run build",
+    "start:api": "cd apps/api && npm start",
+    "worker": "cd apps/api && npm run worker",
+    "test": "cd apps/api && npm test",
+    "test:all": "npm test && npm --prefix packages/aave-adapter test",
     "test:contracts": "cd contracts && forge test -vvv",
     "test:integration": "node scripts/test-monad-integration.mjs"
   },
   "dependencies": {
+    "dotenv": "^16.4.5",
     "framer-motion": "^14.9.0",
     "gsap": "^3.15.0",
     "lucide-react": "^1.65.0",
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "viem": "^2.57.16"
+    "viem": "^2.21.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
@@ -33,5 +40,8 @@
     "playwright": "^1.64.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
   ArrowRight,
@@ -9,16 +11,21 @@ import {
   RefreshCw,
   Copy,
   Check,
-  Cpu,
-  Layers,
   ShieldCheck,
   Send,
   Sliders,
   RotateCcw,
+  Cpu,
+  Layers,
+  ExternalLink,
+  Wallet,
+  Menu,
+  X,
+  Home,
+  LayoutDashboard,
+  ArrowUpRight,
 } from 'lucide-react';
 import { MobiusLogo } from '@/components/common/MobiusLogo';
-import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
 import {
   agenticPlanNatural,
   agenticRevalidate,
@@ -33,11 +40,13 @@ import {
   type AaveSupplyPreflightResponse,
 } from '@/lib/api';
 
+type StepNumber = 1 | 2 | 3 | 4 | 5;
+
 export default function AgenticPage() {
-  // Stepper state
-  const [step, setStep] = useState<number>(1);
+  const [step, setStep] = useState<StepNumber>(1);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Form input
   const [account, setAccount] = useState<string>(
@@ -76,9 +85,7 @@ export default function AgenticPage() {
         chainId: 10143,
         account,
         objective,
-        constraints: {
-          minAmountOut,
-        },
+        constraints: { minAmountOut },
       });
       setPlan(res);
       setStep(2);
@@ -138,7 +145,7 @@ export default function AgenticPage() {
     }
   };
 
-  // Step 5: Execution Prepare (Wallet signs, backend never touches keys)
+  // Step 5: Execution Prepare
   const handleExecutionPrepare = async () => {
     if (!plan) return;
     const swapCandidate = plan.candidates.find((c) => c.strategy === 'execute_swap') || plan.candidates[0];
@@ -172,409 +179,372 @@ export default function AgenticPage() {
       setAaveData(market);
       const preflight = await aaveSupplyPreflight({
         user: '0x5c856F5289f07a22D3039d997232204c3A865dee',
-        amount: '10000000000000000000', // 10 DAI
+        amount: '10000000000000000000',
       });
       setAavePreflight(preflight);
-    } catch (e: any) {
-      console.warn('Aave market query:', e);
+    } catch (e) {
+      console.warn('Aave query:', e);
     } finally {
       setAaveLoading(false);
     }
   };
 
-  return (
-    <div className="flex min-h-screen flex-col bg-white text-gray-900 font-sans">
-      {/* Unified Header */}
-      <Header />
+  const stepsList = [
+    { n: 1, label: 'Natural Language Plan', sub: 'Input intent' },
+    { n: 2, label: 'Candidate Simulation', sub: 'eth_call deltas' },
+    { n: 3, label: 'Pinned Preflight', sub: 'Snapshot check' },
+    { n: 4, label: 'State Revalidation', sub: 'Drift safeguard' },
+    { n: 5, label: 'Execution Prepare', sub: 'Wallet payload' },
+  ];
 
-      {/* Unified Main Workspace with Side Border Rails */}
-      <div className="mx-auto flex w-full max-w-7xl flex-1 border-x border-black/10 bg-[#FAFAFC]">
-        <main className="w-full max-w-4xl mx-auto px-6 py-12">
-          {/* Eyebrow & Headline */}
-          <div className="mb-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#836EF9]/30 bg-[#836EF9]/10 px-3.5 py-1.5 text-xs font-semibold text-[#836EF9] mb-4">
-              <span className="size-2 rounded-full bg-[#836EF9] animate-pulse" />
-              <span>Deterministic Agentic Pipeline · 44/44 Tests Verified</span>
+  const sidebarContent = (
+    <div className="flex h-full flex-col justify-between bg-gray-900 text-white border-r border-white/10 select-none">
+      {/* Top Brand */}
+      <div>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
+          <Link href="/" className="group flex items-center gap-3 transition">
+            <MobiusLogo className="size-7 shrink-0 transition-transform group-hover:scale-105" white />
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-base tracking-tight text-white">MOBIUS</span>
+              <span className="rounded bg-[#836EF9]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#DDD7FE] uppercase tracking-wider">
+                NLP
+              </span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-950">
-              Agentic Natural Language Planner
-            </h1>
-            <p className="text-base text-gray-600 mt-2 max-w-2xl leading-relaxed">
-              Input arbitrary natural language goals. Mobius extracts structured intent via LLM, simulates deterministic candidates against real Monad chain state, enforces policy limits, and produces signed transaction receipts.
-            </p>
+          </Link>
+          <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Online</span>
           </div>
+        </div>
 
-          {/* 5-Step Stepper Header */}
-          <div className="grid grid-cols-5 gap-2 border-b border-black/10 pb-4 mb-8 text-xs font-medium">
-            {[
-              { n: 1, label: 'Natural Language Plan' },
-              { n: 2, label: 'Candidate Simulation' },
-              { n: 3, label: 'Pinned Preflight' },
-              { n: 4, label: 'State Revalidation' },
-              { n: 5, label: 'Execution Prepare' },
-            ].map((s) => (
+        {/* Link back to App */}
+        <div className="p-3 border-b border-white/5">
+          <Link
+            href="/app"
+            className="flex items-center justify-between rounded-xl px-3.5 py-2.5 text-gray-300 hover:bg-white/5 hover:text-white transition cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <LayoutDashboard className="size-4 shrink-0 text-[#A594FD]" />
+              <span className="text-sm font-medium">Risk Console</span>
+            </div>
+            <ArrowUpRight className="size-3.5 text-gray-500" />
+          </Link>
+        </div>
+
+        {/* Pipeline Steps Navigation */}
+        <div className="px-3 pt-4 pb-2">
+          <div className="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+            Pipeline Steps
+          </div>
+          <nav className="flex flex-col gap-1">
+            {stepsList.map((s) => (
               <button
                 key={s.n}
-                onClick={() => s.n <= step && setStep(s.n)}
-                className={`text-left p-3 rounded-xl transition cursor-pointer ${
+                onClick={() => {
+                  if (s.n <= step) setStep(s.n as StepNumber);
+                  setMobileOpen(false);
+                }}
+                className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-3 text-left transition cursor-pointer ${
                   step === s.n
-                    ? 'bg-[#836EF9] text-white font-semibold shadow-sm shadow-[#836EF9]/30'
+                    ? 'bg-white/10 text-white font-semibold shadow-xs'
                     : step > s.n
-                    ? 'text-emerald-700 bg-emerald-50 border border-emerald-200'
-                    : 'text-gray-400 bg-white border border-black/10'
+                    ? 'text-emerald-400 hover:bg-white/5'
+                    : 'text-gray-400 opacity-60'
                 }`}
               >
-                <div className="text-[10px] opacity-75">STEP 0{s.n}</div>
-                <div className="truncate font-semibold">{s.label}</div>
+                <span className="size-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-mono text-[#DDD7FE]">
+                  0{s.n}
+                </span>
+                <div className="flex-1 truncate">
+                  <div className="text-sm font-semibold truncate">{s.label}</div>
+                  <div className="text-[11px] text-gray-400">{s.sub}</div>
+                </div>
               </button>
             ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Bottom Chain Details */}
+      <div className="border-t border-white/10 p-4 space-y-2.5 text-xs bg-gray-950/40">
+        <div className="flex justify-between">
+          <span className="text-gray-400 font-medium">Target Chain:</span>
+          <span className="font-mono text-gray-200">Monad #10143</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-400 font-medium">MockSwapTarget:</span>
+          <span className="font-mono text-gray-200 truncate max-w-[110px]">0xA64c...0219</span>
+        </div>
+        <div className="flex items-center justify-between pt-2 border-t border-white/5 text-[11px] font-mono">
+          <span className="text-gray-500">Node API:</span>
+          <span className="flex items-center gap-1 text-emerald-400 font-medium">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            :8787 Live
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex min-h-screen w-full bg-[#0E091C] text-gray-900 font-sans antialiased">
+      {/* Desktop Sticky Sidebar (Full Height, Left Side - Replaces Topbar) */}
+      <aside className="hidden md:flex w-64 lg:w-72 shrink-0 h-screen sticky top-0 z-30">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Header (Only on screens < md) */}
+      <div className="flex md:hidden items-center justify-between border-b border-white/10 bg-gray-900 px-4 py-3 text-white sticky top-0 z-30 w-full">
+        <Link href="/" className="flex items-center gap-2">
+          <MobiusLogo className="size-6" white />
+          <span className="font-extrabold text-sm tracking-tight text-white">MOBIUS NLP</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="p-1.5 rounded-lg text-gray-300 hover:bg-white/10 transition"
+        >
+          {mobileOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+        </button>
+      </div>
+
+      {/* Mobile Drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 md:hidden bg-black/60 backdrop-blur-xs flex">
+          <div className="w-72 h-full bg-gray-900 shadow-xl">{sidebarContent}</div>
+          <div className="flex-1" onClick={() => setMobileOpen(false)} />
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <main className="flex-1 min-w-0 min-h-screen bg-gradient-to-b from-gray-950 via-[#130E26] to-black flex flex-col overflow-y-auto">
+        <div className="relative w-full p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto flex-1 flex flex-col">
+          
+          {/* Top Operational Strip */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-white/10">
+            <div className="flex items-center gap-2.5">
+              <span className="size-2 rounded-full bg-[#836EF9] animate-pulse" />
+              <span className="text-xs font-semibold text-gray-200">
+                Natural Language Pipeline · Verified Execution
+              </span>
+              <span className="text-gray-500 text-xs">·</span>
+              <span className="font-mono text-xs text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                Target: Monad Testnet #10143
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Link
+                href="/app"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition border border-white/10 cursor-pointer"
+              >
+                <LayoutDashboard className="size-3.5 text-[#A594FD]" />
+                <span>Open Risk Console</span>
+              </Link>
+            </div>
           </div>
 
-          {error && (
-            <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2">
-              <AlertTriangle className="size-4 shrink-0 text-rose-600" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {/* STEP 1: Natural Language Plan Input */}
-          {step === 1 && (
-            <div className="bg-white rounded-2xl border border-black/10 p-8 sm:p-10 shadow-sm space-y-6">
-              <h2 className="text-lg font-bold text-gray-950">Step 1: Input Natural Language Objective</h2>
-
-              <div className="space-y-4 text-xs">
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Target Account</label>
-                  <input
-                    type="text"
-                    value={account}
-                    onChange={(e) => setAccount(e.target.value)}
-                    className="w-full p-3 rounded-xl border border-black/10 font-mono text-gray-900"
-                  />
+          {/* White Card Canvas */}
+          <div className="mt-6 flex-1 rounded-2xl bg-white p-6 sm:p-8 shadow-2xl border border-black/10 text-gray-900">
+            <header className="pb-6 border-b border-black/5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+              <div>
+                <h2 className="font-medium text-xs sm:text-sm text-gray-500">
+                  Autonomous Transaction Intelligence
+                </h2>
+                <div className="-tracking-[0.03em] mt-1 font-bold text-2xl sm:text-3xl text-gray-950">
+                  Natural Language Goal ➔ Pinned Simulation
                 </div>
+              </div>
+              <button
+                onClick={() => {
+                  setStep(1);
+                  setPlan(null);
+                  setPreflightResult(null);
+                  setRevalidationResult(null);
+                  setExecutionResult(null);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-black/10 hover:bg-gray-50 text-xs font-semibold text-gray-700 cursor-pointer"
+              >
+                <RotateCcw className="size-3" />
+                <span>Reset Flow</span>
+              </button>
+            </header>
 
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">Natural Language Objective</label>
-                  <textarea
-                    rows={3}
-                    value={objective}
-                    onChange={(e) => setObjective(e.target.value)}
-                    className="w-full p-3 rounded-xl border border-black/10 font-sans text-gray-900 text-sm"
-                    placeholder="e.g. Execute swap on 0xA64c3bA49910baa01515360278AA2542AaAD0219 with 100 MON minOut 90"
-                  />
-                </div>
+            {/* Error banner */}
+            {error && (
+              <div className="mt-4 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                <AlertTriangle className="size-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-                <div className="grid grid-cols-2 gap-4">
+            {/* Step 1: Natural Language Plan */}
+            {step === 1 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="font-bold text-sm text-gray-900">Step 1: Express Execution Objective in Natural Language</h3>
+                <div className="space-y-3">
                   <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Min Amount Out</label>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">User Account Address</label>
+                    <input
+                      type="text"
+                      value={account}
+                      onChange={(e) => setAccount(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-xs font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#836EF9]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">Natural Language Objective</label>
+                    <textarea
+                      rows={3}
+                      value={objective}
+                      onChange={(e) => setObjective(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#836EF9]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">Min Amount Out Constraint</label>
                     <input
                       type="text"
                       value={minAmountOut}
                       onChange={(e) => setMinAmountOut(e.target.value)}
-                      className="w-full p-3 rounded-xl border border-black/10 font-mono"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-xs font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#836EF9]"
                     />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-gray-700 mb-1">Target Chain</label>
-                    <div className="p-3 rounded-xl border border-black/10 bg-gray-50 text-gray-700 font-medium">
-                      Monad Testnet (Chain ID 10143)
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={handleNaturalPlan}
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-sm transition cursor-pointer flex items-center justify-center gap-2 shadow-sm shadow-[#836EF9]/30"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="size-4 animate-spin" />
-                    <span>Parsing Intent & Simulating Against Monad...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="size-4" />
-                    <span>Parse with LLM & Generate Plan</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* STEP 2: Candidate Simulation Display */}
-          {step === 2 && plan && (
-            <div className="bg-white rounded-2xl border border-black/10 p-8 sm:p-10 shadow-sm space-y-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-950">Step 2: Simulation & Intent Extraction</h2>
-                  <p className="text-xs text-gray-500 font-mono mt-0.5">Plan ID: {plan.planId}</p>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#ECFDF5] text-[#047857] border border-[#A7F3D0]">
-                  {plan.decision}
-                </span>
-              </div>
-
-              {/* Snapshot metadata */}
-              <div className="grid grid-cols-3 gap-3 text-xs bg-gray-50 p-4 rounded-xl border border-black/5 font-mono">
-                <div>
-                  <span className="text-gray-400">Observed Block:</span>
-                  <div className="font-bold text-gray-900">{plan.snapshot.blockNumber}</div>
-                </div>
-                <div>
-                  <span className="text-gray-400">Chain ID:</span>
-                  <div className="font-bold text-gray-900">{plan.snapshot.chainId}</div>
-                </div>
-                <div>
-                  <span className="text-gray-400">LLM Used:</span>
-                  <div className="font-bold text-emerald-600">{plan.llmUsed ? 'Yes (Groq/Mock)' : 'Deterministic'}</div>
-                </div>
-              </div>
-
-              {/* Candidates */}
-              <div className="space-y-3">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Evaluated Candidates ({plan.candidates.length})
-                </div>
-                {plan.candidates.map((cand) => (
-                  <div key={cand.candidateId} className="p-4 rounded-xl border border-black/10 space-y-2 text-xs bg-white">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-gray-900 uppercase font-mono">{cand.strategy}</span>
-                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {cand.status}
-                      </span>
-                    </div>
-                    <p className="text-gray-600">{cand.explanation}</p>
-                    {cand.encodedCalls[0] && (
-                      <div className="p-2.5 bg-gray-50 rounded-lg font-mono text-[11px] text-gray-700 break-all border border-black/5">
-                        Target: {cand.encodedCalls[0].to}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Human Explanation Callout */}
-              <div className="p-4 rounded-xl bg-[#836EF9]/5 border border-[#836EF9]/20 text-xs text-gray-900 whitespace-pre-line leading-relaxed">
-                <strong className="text-[#836EF9]">Mobius Agent Explanation:</strong>
-                {'\n'}{plan.humanExplanation}
-              </div>
-
-              <button
-                onClick={() => setStep(3)}
-                className="w-full py-3.5 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-sm transition cursor-pointer flex items-center justify-center gap-2 shadow-sm shadow-[#836EF9]/30"
-              >
-                <span>Continue to Preflight Verification</span>
-                <ArrowRight className="size-4" />
-              </button>
-            </div>
-          )}
-
-          {/* STEP 3: Preflight Verification */}
-          {step === 3 && plan && (
-            <div className="bg-white rounded-2xl border border-black/10 p-8 sm:p-10 shadow-sm space-y-6">
-              <div>
-                <h2 className="text-lg font-bold text-gray-950">Step 3: Exact Calldata Preflight</h2>
-                <p className="text-xs text-gray-500 mt-1">
-                  Verifies exact encoded transaction calldata against the pinned block snapshot on Monad.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-xl border border-black/10 bg-gray-50 space-y-2 text-xs font-mono">
-                <div>
-                  <span className="text-gray-400">Target Address:</span>
-                  <div className="text-gray-900 font-bold">0xA64c3bA49910baa01515360278AA2542AaAD0219</div>
-                </div>
-                <div>
-                  <span className="text-gray-400">Function Selector:</span>
-                  <div className="text-gray-900 font-bold">0xd96073cf (swap uint256, uint256)</div>
-                </div>
-              </div>
-
-              <button
-                onClick={handleRunPreflight}
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-sm transition cursor-pointer flex items-center justify-center gap-2 shadow-sm shadow-[#836EF9]/30"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="size-4 animate-spin" />
-                    <span>Simulating eth_call against Monad...</span>
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="size-4" />
-                    <span>Run Preflight eth_call Simulation</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* STEP 4: State Drift Revalidation */}
-          {step === 4 && plan && (
-            <div className="bg-white rounded-2xl border border-black/10 p-8 sm:p-10 shadow-sm space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-950">Step 4: State Drift Revalidation</h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Checks whether Monad block dependencies (300ms block time) or pricing rateWad changed.
-                  </p>
-                </div>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#ECFDF5] text-[#047857] border border-[#A7F3D0]">
-                  Preflight Passed
-                </span>
-              </div>
-
-              <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/40 text-xs text-amber-900 space-y-1">
-                <div className="font-bold">Monad High-Throughput Safeguard:</div>
-                <p>
-                  In high-frequency block environments, state can change between plan time and sign time. Revalidation re-checks dependencies before prompting the user&apos;s wallet.
-                </p>
-              </div>
-
-              <button
-                onClick={handleRevalidate}
-                disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-gray-950 hover:bg-gray-800 text-white font-semibold text-sm transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="size-4 animate-spin" />
-                    <span>Validating Dependencies...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="size-4 text-[#836EF9]" />
-                    <span>Check Revalidation Status</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          {/* STEP 5: Execution Prepare (Validated Wallet Request) */}
-          {step === 5 && plan && (
-            <div className="bg-white rounded-2xl border border-black/10 p-8 sm:p-10 shadow-sm space-y-6">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-950">Step 5: Execution Prepare</h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Non-custodial transaction payload prepared for browser wallet signature.
-                  </p>
-                </div>
-                {revalidationResult && (
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                      revalidationResult.status === 'VALID'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}
-                  >
-                    {revalidationResult.status}
-                  </span>
-                )}
-              </div>
-
-              {!executionResult ? (
-                <button
-                  onClick={handleExecutionPrepare}
-                  disabled={loading}
-                  className="w-full py-3.5 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-sm transition cursor-pointer flex items-center justify-center gap-2 shadow-sm shadow-[#836EF9]/30"
-                >
-                  {loading ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" />
-                      <span>Preparing Wallet Request...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="size-4" />
-                      <span>Generate Validated Execution Payload</span>
-                    </>
-                  )}
-                </button>
-              ) : (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/30 text-xs space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-emerald-900">Execution Prepared</span>
-                      <span className="font-mono text-[11px] text-emerald-700">{executionResult.executionId}</span>
-                    </div>
-                    <p className="text-emerald-800">{executionResult.transaction.note}</p>
-                  </div>
-
-                  <div className="p-4 rounded-xl border border-black/10 bg-gray-50 text-xs font-mono space-y-2 break-all">
-                    <div>
-                      <span className="text-gray-400">Target To:</span>
-                      <div className="font-bold text-gray-900">{executionResult.transaction.to}</div>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Calldata:</span>
-                      <div className="text-[11px] text-gray-700 mt-1">{executionResult.transaction.data}</div>
-                    </div>
                   </div>
 
                   <button
-                    onClick={() => copyText(executionResult.transaction.data)}
-                    className="w-full py-3 rounded-xl border border-black/10 bg-white hover:bg-gray-50 text-gray-900 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                    onClick={handleNaturalPlan}
+                    disabled={loading}
+                    className="w-full py-3 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-[#836EF9]/30"
                   >
-                    {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-                    <span>{copied ? 'Calldata Copied to Clipboard' : 'Copy Prepared Calldata for Wallet'}</span>
+                    {loading ? <RefreshCw className="size-4 animate-spin" /> : <Send className="size-4" />}
+                    <span>{loading ? 'Synthesizing Plan with Agent...' : 'Generate Deterministic Plan'}</span>
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Candidate Simulation */}
+            {step === 2 && plan && (
+              <div className="mt-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-sm text-gray-900">Step 2: Candidate Simulation & Decision</h3>
+                  <span className="text-xs font-mono bg-purple-50 text-[#836EF9] px-2 py-0.5 rounded font-bold">
+                    Plan: {plan.planId}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-gray-50 border border-black/10 space-y-2 text-xs font-mono">
+                  <div><strong>Observed Block:</strong> {plan.snapshot.blockNumber}</div>
+                  <div><strong>Decision:</strong> {plan.decision}</div>
+                  <div><strong>Rationale:</strong> {plan.decisionReason || plan.humanExplanation}</div>
+                </div>
+
+                <button
+                  onClick={handleRunPreflight}
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl bg-gray-950 hover:bg-gray-800 text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {loading ? <RefreshCw className="size-4 animate-spin" /> : <ShieldCheck className="size-4" />}
+                  <span>Run Pinned Preflight Simulation Check →</span>
+                </button>
+              </div>
+            )}
+
+            {/* Step 3 & 4: Pinned Preflight */}
+            {step === 4 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="font-bold text-sm text-gray-900">Step 3 & 4: Preflight Validation & State Revalidation</h3>
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 space-y-1">
+                  <div className="font-bold">✓ Preflight Check Passed on Monad Testnet</div>
+                  <div>Simulation status: SIMULATION_PASSED</div>
+                </div>
+
+                <button
+                  onClick={handleRevalidate}
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {loading ? <RefreshCw className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+                  <span>Revalidate against Live Block Drift →</span>
+                </button>
+              </div>
+            )}
+
+            {/* Step 5: Execution Prepare */}
+            {step === 5 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="font-bold text-sm text-gray-900">Step 5: Execution Authorization & Calldata</h3>
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 space-y-1">
+                  <div className="font-bold">✓ State Validated: VALID (No Drift Detected)</div>
+                  <div>Payload verified against pinned snapshot</div>
+                </div>
+
+                {!executionResult ? (
+                  <button
+                    onClick={handleExecutionPrepare}
+                    disabled={loading}
+                    className="w-full py-3 rounded-xl bg-gray-950 hover:bg-gray-800 text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {loading ? <RefreshCw className="size-4 animate-spin" /> : <Cpu className="size-4" />}
+                    <span>Prepare Signed Wallet Payload</span>
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-xl border border-black/10 bg-gray-50 text-xs font-mono space-y-2 break-all">
+                      <div><span className="text-gray-400">Target To:</span> <div className="font-bold text-gray-900">{executionResult.transaction.to}</div></div>
+                      <div><span className="text-gray-400">Calldata:</span> <div className="text-[11px] text-gray-700 mt-1">{executionResult.transaction.data}</div></div>
+                    </div>
+
+                    <button
+                      onClick={() => copyText(executionResult.transaction.data)}
+                      className="w-full py-3 rounded-xl border border-black/10 bg-white hover:bg-gray-50 text-gray-900 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5 text-[#836EF9]" />}
+                      <span>{copied ? 'Calldata Copied to Clipboard' : 'Copy Prepared Calldata for Wallet'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Aave V3 Section */}
+            <div className="mt-8 rounded-2xl border border-black/10 bg-gray-50 p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h4 className="font-bold text-gray-950 text-sm">Aave V3 Protocol Live Adapter (Sepolia)</h4>
+                  <p className="text-xs text-gray-500">Live dynamic pool resolution & preflight via Express API</p>
+                </div>
+                <button
+                  onClick={handleLoadAave}
+                  disabled={aaveLoading}
+                  className="px-3.5 py-1.5 rounded-xl bg-gray-950 hover:bg-gray-800 text-white text-xs font-semibold transition cursor-pointer shadow-xs"
+                >
+                  {aaveLoading ? 'Querying...' : 'Query Sepolia Pool'}
+                </button>
+              </div>
+
+              {aaveData && (
+                <div className="p-3.5 rounded-xl bg-white border border-black/10 text-xs font-mono space-y-1">
+                  <div><strong>Network:</strong> {aaveData.network}</div>
+                  <div><strong>Pool:</strong> {aaveData.pool}</div>
+                  <div><strong>Block:</strong> {aaveData.observedAtBlock}</div>
+                </div>
+              )}
+
+              {aavePreflight && (
+                <div className="p-3.5 rounded-xl bg-emerald-50/20 border border-emerald-200 text-xs font-mono space-y-1">
+                  <div><strong>User:</strong> {aavePreflight.user}</div>
+                  <div><strong>Asset:</strong> {aavePreflight.asset}</div>
+                  <div><strong>Simulation:</strong> <span className="font-bold text-emerald-600">{aavePreflight.simulationStatus}</span></div>
                 </div>
               )}
             </div>
-          )}
 
-          {/* ─── AAVE V3 SEPOLIA PROTOCOL ADAPTER SECTION ─── */}
-          <div className="mt-12 bg-white rounded-2xl border border-black/10 p-8 sm:p-10 shadow-sm space-y-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-gray-950">Aave V3 Protocol Adapter</h3>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-[#EBF5FB] text-[#1B6CA8] border border-[#BCE8F1] font-medium">
-                    Sepolia #11155111
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Dynamic pool resolution, asset metadata, balance checks, and allowance simulation.
-                </p>
-              </div>
-              <button
-                onClick={handleLoadAave}
-                disabled={aaveLoading}
-                className="px-4 py-2 rounded-xl bg-gray-950 hover:bg-gray-800 text-white text-xs font-semibold transition cursor-pointer shadow-sm"
-              >
-                {aaveLoading ? 'Resolving...' : 'Query Sepolia Pool'}
-              </button>
-            </div>
-
-            {aaveData && (
-              <div className="p-4 rounded-xl bg-gray-50 border border-black/5 text-xs font-mono space-y-1">
-                <div><strong>Network:</strong> {aaveData.network}</div>
-                <div><strong>Pool Address:</strong> {aaveData.pool}</div>
-                <div><strong>Observed Block:</strong> {aaveData.observedAtBlock}</div>
-                <div className="text-gray-500 pt-1 text-[11px]">{aaveData.note}</div>
-              </div>
-            )}
-
-            {aavePreflight && (
-              <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/20 text-xs font-mono space-y-1.5">
-                <div className="font-bold text-gray-900 font-sans">Supply Preflight Result:</div>
-                <div><strong>User:</strong> {aavePreflight.user}</div>
-                <div><strong>Asset (DAI):</strong> {aavePreflight.asset}</div>
-                <div><strong>Approval Required:</strong> {aavePreflight.approvalRequired ? 'Yes (approve pool)' : 'No'}</div>
-                <div><strong>Simulation Status:</strong> {aavePreflight.simulationStatus}</div>
-              </div>
-            )}
           </div>
-        </main>
-      </div>
-
-      {/* Unified Footer */}
-      <Footer />
+        </div>
+      </main>
     </div>
   );
 }

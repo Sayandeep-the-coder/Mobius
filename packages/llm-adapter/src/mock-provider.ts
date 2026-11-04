@@ -24,17 +24,17 @@ export class MockLLMProvider implements LLMProvider {
 
     const parameters: Record<string, string> = {};
     const amountMatch = text.match(/(\d+)\s*(eth|mon|dai|usdc)/i);
-    if (amountMatch) {
+    if (amountMatch?.[1]) {
       parameters.amountIn = amountMatch[1];
     }
 
     const minOutMatch = text.match(/min(?:imum)?\s*(?:out|output)?\s*[:=]?\s*(\d+)/i);
-    if (minOutMatch) {
+    if (minOutMatch?.[1]) {
       parameters.minOut = minOutMatch[1];
     }
 
     const targetMatch = text.match(/0x[0-9a-fA-F]{40}/);
-    if (targetMatch) {
+    if (targetMatch?.[0]) {
       parameters.target = targetMatch[0];
     }
 

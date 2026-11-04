@@ -5,6 +5,8 @@ import type { AgenticPlanRequest } from "@mobius/contracts-abi";
  * The LLM is optional and sandboxed — it proposes, deterministic code decides.
  */
 export interface LLMProvider {
+  config: LLMConfig;
+
   /**
    * Parse natural language into a typed AgenticPlanRequest.
    * Output must pass Zod validation before being used.
@@ -32,7 +34,7 @@ export interface LLMProvider {
 }
 
 export interface LLMConfig {
-  provider: "openai" | "anthropic" | "mock";
+  provider: "groq" | "openai" | "anthropic" | "mock";
   apiKey?: string;
   model?: string;
   enabled: boolean;

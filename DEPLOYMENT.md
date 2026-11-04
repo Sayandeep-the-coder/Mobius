@@ -1,15 +1,14 @@
 # Mobius — Zero-Cost Deployment Guide
 
-Deploy Mobious on Oracle Cloud Always Free ARM VM + Cloudflare Pages frontend. Total cost: **₹0**.
+Deploy Mobious on Oracle Cloud Always Free ARM VM + Vercel frontend. Total cost: **₹0**.
 
 ## Architecture
 
 ```
-┌─────────────────┐       HTTPS       ┌─────────────────────┐
-│   Cloudflare    │ ─────────────────►│   Caddy (Oracle VM) │
-│    Pages        │                   │   Reverse Proxy     │
-│   (Next.js)     │                   │   HTTPS Termination │
-└─────────────────┘                   └──────────┬──────────┘
+┌─────────────┐       HTTPS       ┌─────────────────────┐
+│   Vercel    │ ─────────────────►│   Caddy (Oracle VM) │
+│  (Next.js)  │                   │   Reverse Proxy     │
+└─────────────┘                   └──────────┬──────────┘
                                                  │
                                                  │ HTTP
                                                  ▼
@@ -38,7 +37,7 @@ Deploy Mobious on Oracle Cloud Always Free ARM VM + Cloudflare Pages frontend. T
 ## Prerequisites
 
 - Oracle Cloud account (free tier signup requires card verification)
-- GitHub account (for Cloudflare Pages)
+- GitHub account (for Vercel)
 - Groq API key (free tier at console.groq.com)
 - SSH key pair
 
@@ -365,7 +364,7 @@ api.your-domain.com {
 }
 ```
 
-Or use Cloudflare Tunnel (no domain needed):
+Or use Vercel for your custom domain (free):
 
 ```caddy
 {
@@ -373,21 +372,12 @@ Or use Cloudflare Tunnel (no domain needed):
     admin localhost:2019
 }
 
-mobious-api.your-domain.com {
+api.your-domain.com {
     reverse_proxy localhost:8787
 }
 ```
 
-Or if you don't have a domain, use Cloudflare Tunnel:
-
-```caddy
-{
-    email your-email@example.com
-    admin localhost:2019
-}
-
-# Cloudflare Tunnel will handle the domain
-{
+Or if you don't have a domain, use a free subdomain from your hosting provider:
     reverse_proxy localhost:8787
 }
 ```
@@ -439,12 +429,14 @@ curl http://localhost:8787/v1/chains
 ## Step 9: Frontend on Cloudflare Pages
 
 1. Push your frontend code to GitHub
-2. Go to [Cloudflare Pages](https://pages.cloudflare.com/)
+2. Go to [Vercel](https://vercel.com/)
 3. Connect your GitHub repository
-4. Build settings:
+4. Import project with these settings:
+   - Framework preset: Next.js
    - Build command: `npm run build`
    - Build output directory: `.next` (or `out` for static export)
-   - Environment variables: `NEXT_PUBLIC_API_URL=https://your-domain.com`
+   - Install command: `npm install`
+   - Environment variables: `NEXT_PUBLIC_API_URL=https://your-api-domain.com`
 5. Deploy
 
 Update your `.env` with `NEXT_PUBLIC_API_URL=https://your-domain.com`

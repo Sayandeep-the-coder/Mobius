@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+:root {
+  /* Monad Official Brand Palette */
+  --monad-purple: #836EF9;
+  --monad-purple-dark: #6E54FF;
+  --monad-purple-light: #DDD7FE;
+  --monad-purple-soft: #C4B5FD;
+  --monad-purple-neon: #A594FD;
+  --monad-void: #0E091C;
+  --monad-deep: #16102B;
+  --monad-card: #171130;
+  --monad-card-hover: #201742;
+
+  /* Aliases for legacy component CSS variables */
+  --near-bg: #836EF9;
+  --near-brand: #836EF9;
+  --near-brand-dark: #6E54FF;
+  --near-brand-light: #DDD7FE;
+
+  --font-family-base: var(--font-figtree), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  font-family: var(--font-family-base);
+  background-color: #ffffff;
+  color: #171717;
+  overflow-x: hidden;
+}
+
+/* Monad Void / Nocturnal dark background overrides */
+.bg-gray-800 {
+  background-color: #130E26;
+}
+
+.bg-gray-850 {
+  background-color: #191233;
+}
+
+.bg-gray-900 {
+  background-color: #0E091C;
+}
+
+.border-black\/11 {
+  border-color: rgba(0, 0, 0, 0.11);
+}
+
+.border-white\/11 {
+  border-color: rgba(255, 255, 255, 0.11);
+}
+
+.bg-white\/11 {
+  background-color: rgba(255, 255, 255, 0.11);
+}
+
+/* Marquee / Ticker Keyframes */
+@keyframes ticker-right {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+@keyframes ticker-left {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker-right {
+  display: flex;
+  width: max-content;
+  animation: ticker-right 40s linear infinite;
+}
+
+.animate-ticker-left {
+  display: flex;
+  width: max-content;
+  animation: ticker-left 40s linear infinite;
+}
+
+.animate-ticker-right:hover,
+.animate-ticker-left:hover {
+  animation-play-state: paused;
+}
+
+/* Monad star tile & grid separators */
+.near-star-pattern,
+.monad-star-pattern {
+  background-image: radial-gradient(circle at 10px 10px, rgba(131, 110, 249, 0.25) 2px, transparent 0);
+  background-size: 20px 20px;
+}
+
+.near-star-pattern-dark,
+.monad-star-pattern-dark {
+  background-image: radial-gradient(circle at 10px 10px, rgba(131, 110, 249, 0.12) 2px, transparent 0);
+  background-size: 20px 20px;
+}
+
+.near-star-tile-mask {
+  -webkit-mask-image: url(/static/images/near-star-tile.svg);
+  mask-image: url(/static/images/near-star-tile.svg);
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 21px 21px;
+  mask-size: 21px 21px;
+}

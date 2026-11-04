@@ -552,7 +552,7 @@ anvil \
 | Time | You (Backend) | Teammate 1 (Solidity) | Teammate 2 (Aave/Typewriter) | Gate |
 |---|---|---|---|---|
 | 09:00–09:30 | Lock schemas, chain config, snapshot interface | Foundry setup, MockSwapTarget skeleton | Clone Typewriter, verify toolchain, create Sepolia burner | Chain IDs verified; file ownership agreed |
-| 09:30–11:00 | Fastify health/chains/preflight + StateSnapshot service | Contract + Foundry unit tests | Aave provider/pool/token reads; Typewriter local token example boot | API starts; forge test passes; Pool resolves |
+| 09:30–11:00 | Express health/chains/preflight + StateSnapshot service | Contract + Foundry unit tests | Aave provider/pool/token reads; Typewriter local token example boot | API starts; forge test passes; Pool resolves |
 | 11:00–12:30 | Candidate planner, simulator adapter, deterministic evaluator | Deploy Monad target, record address, verify | Aave supply preflight/allowance; Typewriter mutation lifecycle locally | Candidate plan returns pass/revert; deployed code readable |
 | 12:30–13:00 | Integrate endpoint contracts; checkpoint blockers | Fix test/deployment issues | Obtain Sepolia gas/test asset; verify Typewriter statuses | Shared smoke tests pass |
 | 13:00–14:30 | Implement revalidation; induce state drift, block stale plan | Change rateWad for controlled test; help verify tx | Execute approval + small Aave supply if faucet/reserve permits | Revalidation returns REPLAN_REQUIRED after drift; Aave receipt or blocker logged |

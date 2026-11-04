@@ -137,3 +137,4 @@ Mobius/
 - [x] Ensured backend NEVER signs or broadcasts user transactions.
 - [x] Typewriter adapter strictly isolates application mutations from external DeFi calls.
 - [x] Documented mutation lifecycle milestones (`received`, `accepted`, `included`, `safe`, `finalized`).
+

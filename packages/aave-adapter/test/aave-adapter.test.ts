@@ -145,3 +145,4 @@ describe("Aave V3 Sepolia Adapter Acceptance Tests", () => {
     assert.equal(preflight.preparedTransaction.functionName, "supply");
   });
 });
+

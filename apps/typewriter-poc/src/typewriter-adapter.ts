@@ -146,3 +146,4 @@ export class TypewriterAdapter {
     record.timestamps.ACCEPTED = new Date().toISOString();
   }
 }
+

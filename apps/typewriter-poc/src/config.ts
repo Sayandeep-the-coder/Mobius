@@ -45,3 +45,4 @@ export const LOCAL_ANVIL_TYPEWRITER_CONFIG: TypewriterServerConfig = {
     submitIntervalMs: 200,
   },
 };
+

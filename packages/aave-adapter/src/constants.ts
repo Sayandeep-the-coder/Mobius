@@ -11,3 +11,4 @@ export const AAVE_SEPOLIA_ADAI = "0x29598b72eb5CeBd806C5dCD549490FdA35B13cD8" as
 
 export const DEFAULT_SEPOLIA_RPC_URL = "https://rpc.sepolia.org";
 export const DEFAULT_MONAD_RPC_URL = "https://testnet-rpc.monad.xyz";
+

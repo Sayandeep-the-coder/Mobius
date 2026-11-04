@@ -61,3 +61,4 @@ Open `http://localhost:3000` to interact with the official token sample.
 - Do **not** route Aave Pool supply/borrow through Typewriter on day one.
 - Typewriter's `accepted` status is local EVM preconfirmation — not onchain finality.
 - Mobius planning, simulation, and policy evaluation must run **before** mutation submission.
+

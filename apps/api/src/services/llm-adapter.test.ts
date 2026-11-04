@@ -12,9 +12,9 @@ describe("MockLLMProvider", () => {
       "Execute swap on 0x1234567890123456789012345678901234567890 with 100 ETH minOut 90"
     );
     expect(result.objective?.type).toBe("execute_swap");
-    expect(result.context?.parameters["amountIn"]).toBe("100");
-    expect(result.context?.parameters["minOut"]).toBe("90");
-    expect(result.context?.parameters["target"]).toBe(
+    expect(result.context?.parameters.amountIn).toBe("100");
+    expect(result.context?.parameters.minOut).toBe("90");
+    expect(result.context?.parameters.target).toBe(
       "0x1234567890123456789012345678901234567890"
     );
   });
@@ -57,11 +57,11 @@ describe("IntentParser", () => {
       "Execute swap on 0x1234567890123456789012345678901234567890 with 100 ETH minOut 90",
       { chainId: 10143, account: "0x1234567890123456789012345678901234567890" as `0x${string}` }
     );
-    expect(result.objective.type).toBeDefined();
+    expect(result.objective?.type).toBeDefined();
     expect(result.chainId).toBe(10143);
     expect(result.account).toBe("0x1234567890123456789012345678901234567890");
-    expect(result.context.protocol).toBe("MockSwapTarget");
-    expect(result.context.actionFamily).toBe("swap");
+    expect(result.context?.protocol).toBe("MockSwapTarget");
+    expect(result.context?.actionFamily).toBe("swap");
   });
 
   it("filters proposed strategies to allowed list", async () => {

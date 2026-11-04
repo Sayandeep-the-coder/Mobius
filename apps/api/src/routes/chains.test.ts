@@ -37,7 +37,7 @@ describe("Chains Routes", () => {
 
     const res = await fetch(`${baseUrl}/v1/chains`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.chains).toHaveLength(2);
     expect(body.chains[0].name).toBe("Monad Testnet");
     expect(body.chains[0].chainId).toBe(10143);
@@ -50,7 +50,7 @@ describe("Chains Routes", () => {
 
     const res = await fetch(`${baseUrl}/v1/chains`);
     expect(res.status).toBe(500);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.error).toBe("Failed to read chain IDs");
   });
 });

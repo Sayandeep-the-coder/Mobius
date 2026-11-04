@@ -24,18 +24,18 @@ export class MockLLMProvider implements LLMProvider {
 
     const parameters: Record<string, string> = {};
     const amountMatch = text.match(/(\d+)\s*(eth|mon|dai|usdc)/i);
-    if (amountMatch) {
-      parameters.amountIn = amountMatch[1];
+    if (amountMatch && amountMatch[1]) {
+      parameters["amountIn"] = amountMatch[1];
     }
 
     const minOutMatch = text.match(/min(?:imum)?\s*(?:out|output)?\s*[:=]?\s*(\d+)/i);
-    if (minOutMatch) {
-      parameters.minOut = minOutMatch[1];
+    if (minOutMatch && minOutMatch[1]) {
+      parameters["minOut"] = minOutMatch[1];
     }
 
     const targetMatch = text.match(/0x[0-9a-fA-F]{40}/);
-    if (targetMatch) {
-      parameters.target = targetMatch[0];
+    if (targetMatch && targetMatch[0]) {
+      parameters["target"] = targetMatch[0];
     }
 
     return {
@@ -50,8 +50,8 @@ export class MockLLMProvider implements LLMProvider {
   }
 
   async proposeStrategies(
-    objective: string,
-    constraints: Record<string, string>
+    _objective: string,
+    _constraints: Record<string, string>
   ): Promise<string[]> {
     // Mock: always propose swap + hold (the two deterministic candidates)
     return ["execute_swap", "hold_defer"];
@@ -87,8 +87,8 @@ export class MockLLMProvider implements LLMProvider {
 
     if (blocked.length > 0) {
       output += `\n🚫 ${blocked.length} candidate(s) blocked by policy:\n`;
-      for (const r of blocked) {
-        output += `- ${r.strategy}: ${r.constraintViolations.join(", ")}\n`;
+      for (const b of blocked) {
+        output += `- ${b.strategy}: ${b.constraintViolations.join(", ")}\n`;
       }
     }
 

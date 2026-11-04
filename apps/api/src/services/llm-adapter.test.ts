@@ -11,10 +11,10 @@ describe("MockLLMProvider", () => {
     const result = await provider.parseIntent(
       "Execute swap on 0x1234567890123456789012345678901234567890 with 100 ETH minOut 90"
     );
-    expect(result.objective.type).toBe("execute_swap");
-    expect(result.context.parameters.amountIn).toBe("100");
-    expect(result.context.parameters.minOut).toBe("90");
-    expect(result.context.parameters.target).toBe(
+    expect(result.objective?.type).toBe("execute_swap");
+    expect(result.context?.parameters["amountIn"]).toBe("100");
+    expect(result.context?.parameters["minOut"]).toBe("90");
+    expect(result.context?.parameters["target"]).toBe(
       "0x1234567890123456789012345678901234567890"
     );
   });

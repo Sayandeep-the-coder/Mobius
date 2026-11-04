@@ -13,6 +13,7 @@ export default defineConfig({
       "@mobius/simulation": path.resolve(__dirname, "../../packages/simulation/src/index.ts"),
       "@mobius/policies": path.resolve(__dirname, "../../packages/policies/src/index.ts"),
       "@mobius/llm-adapter": path.resolve(__dirname, "../../packages/llm-adapter/src/index.ts"),
+      "@mobius/aave-adapter": path.resolve(__dirname, "../../packages/aave-adapter/src/index.ts"),
     },
   },
 });

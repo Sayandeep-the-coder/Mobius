@@ -20,7 +20,8 @@
       "@mobius/contracts-abi": ["../../packages/contracts-abi/src/index.ts"],
       "@mobius/simulation": ["../../packages/simulation/src/index.ts"],
       "@mobius/policies": ["../../packages/policies/src/index.ts"],
-      "@mobius/llm-adapter": ["../../packages/llm-adapter/src/index.ts"]
+      "@mobius/llm-adapter": ["../../packages/llm-adapter/src/index.ts"],
+      "@mobius/aave-adapter": ["../../packages/aave-adapter/src/index.ts"]
     }
   },
   "include": ["src/**/*"],

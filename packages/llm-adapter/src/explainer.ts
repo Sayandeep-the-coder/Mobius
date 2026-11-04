@@ -21,7 +21,7 @@ export class Explainer {
       explanation: string;
     }[]
   ): Promise<string> {
-    if (!this.provider.config.enabled) {
+    if (!this.provider.config?.enabled) {
       return this.deterministicExplain(results);
     }
 
@@ -48,25 +48,25 @@ export class Explainer {
 
     if (passed.length > 0) {
       output += `✅ ${passed.length} passed:\n`;
-      for (const r of passed) {
-        output += `- ${r.strategy}: ${r.explanation}\n`;
+      for (const p of passed) {
+        output += `  - ${p.candidateId} (${p.strategy}): ${p.explanation}\n`;
       }
     }
 
     if (reverted.length > 0) {
       output += `\n❌ ${reverted.length} reverted:\n`;
       for (const r of reverted) {
-        output += `- ${r.strategy}: ${r.explanation}\n`;
+        output += `  - ${r.candidateId} (${r.strategy}): ${r.explanation}\n`;
       }
     }
 
     if (blocked.length > 0) {
-      output += `\n🚫 ${blocked.length} blocked by policy:\n`;
-      for (const r of blocked) {
-        output += `- ${r.strategy}: ${r.constraintViolations.join(", ")}\n`;
+      output += `\n⚠️ ${blocked.length} blocked by policy:\n`;
+      for (const b of blocked) {
+        output += `  - ${b.candidateId} (${b.strategy}): ${b.constraintViolations.join(", ")}\n`;
       }
     }
 
-    return output;
+    return output.trim();
   }
 }

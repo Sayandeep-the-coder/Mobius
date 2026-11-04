@@ -27,14 +27,15 @@ Mobius is an **agentic transaction-intelligence and execution-orchestration laye
 
 | Network | Chain ID | Decimal | Hex | RPC URL | Purpose |
 |---|---|---|---|---|---|
-| **Monad Testnet** | 10143 | `10143` | `0x279f` | `https://testnet-rpc.monad.xyz` | Mobius harness + Typewriter execution |
+| **Monad Testnet** | 10143 | `10143` | `0x279f` | `https://testnet-rpc.monad.xyz` | Mobius harness + Typewriter execution; mock contracts only |
 | **Ethereum Sepolia** | 11155111 | `11155111` | `0xaa36a7` | Provider URL (env) | Official Aave V3 test market |
-| **Local Anvil fork** | — | — | — | `127.0.0.1:8545` | Isolated stateful multi-action simulation |
+| **Local Anvil fork** | 31337 | — | — | `127.0.0.1:8545` | Isolated stateful multi-action simulation with actual Aave V3 |
 
 ### Non-Negotiable Chain Rules
 1. **Never conflate environments:** Aave V3 test integration runs exclusively on **Ethereum Sepolia** (chainId `11155111`). Never label a Sepolia tx as a Monad tx, and never deploy a fake or custom Aave contract to Monad.
 2. **Dynamic resolution:** Always query `PoolAddressesProvider.getPool()` dynamically at runtime. Never hardcode the Pool proxy address without verification.
-3. **Fail closed on chain ID mismatch:** If RPC chainId does not match `11155111` for Aave or `10143` for Monad, reject immediately.
+3. **Fail closed on chain ID mismatch:** If RPC chainId does not match `11155111` for Aave Sepolia, `10143` for Monad Testnet, or `31337` for Anvil fork, reject immediately.
+4. **Anvil fork isolation:** Anvil fork (chainId `31337`) provides access to actual Aave V3 Mainnet contracts in a local sandbox. State changes do not settle on Monad Testnet or Mainnet.
 
 ---
 

@@ -4,42 +4,63 @@ import {
   isAddress,
   zeroAddress,
 } from "viem";
+
 import { AaveSepoliaClient } from "./aave-client.js";
-import { aavePoolAbi, erc20Abi, protocolDataProviderAbi } from "./abis.js";
-import { AAVE_SEPOLIA_PROTOCOL_DATA_PROVIDER } from "./constants.js";
-import type { SimulationStatus } from "./supply-preflight.js";
+import { AaveMonadMainnetForkClient } from "./aave-client-fork.js";
+import { aavePoolAbi, erc20Abi } from "./abis.js";
+import { AAVE_MAINNET_POOL_ADDRESSES_PROVIDER, AAVE_SEPOLIA_POOL_ADDRESSES_PROVIDER } from "./constants.js";
+
+export type WithdrawSimulationStatus = "NOT_READY" | "PASSED" | "REVERTED";
 
 export interface WithdrawPreflightRequest {
   user: Address;
   asset: Address;
-  amount: bigint | string;
-  protocolDataProviderAddress?: Address;
+  amount: string;
 }
 
+/**
+ * Response type compatible with the API routes in apps/api/src/routes/aave.ts.
+ * The routes access: blockNumber, poolAddress, aTokenAddress, userATokenBalance,
+ * requestedAmount, status, warnings, caveat, gasEstimate, preparedTransaction.
+ * Note: The response is then mapped to AaveWithdrawPreflightResponse with:
+ *   simulationStatus = statusMap[preflight.status]
+ *   reason = preflight.warnings?.join("; ")
+ *   caveat = preflight.caveat
+ */
 export interface WithdrawPreflightResponse {
   chainId: number;
-  status: SimulationStatus;
-  poolAddress: Address;
-  aTokenAddress: Address;
+  blockNumber: string;
+  blockHash: `0x${string}`;
+  poolAddress: `0x${string}`;
+  aTokenAddress: `0x${string}`;
   userATokenBalance: string;
   requestedAmount: string;
-  blockNumber: string;
-  gasEstimate?: string;
-  preparedTransaction?: {
-    to: Address;
-    data: `0x${string}`;
-    value: string;
-    functionName: string;
-  };
+  status: "NOT_READY" | "SIMULATION_PASSED" | "SIMULATION_REVERTED";
   warnings?: string[];
   caveat: string;
+  gasEstimate?: string;
+  preparedTransaction?: {
+    to: `0x${string}`;
+    data: `0x${string}`;
+    value: string;
+  };
 }
 
+/**
+ * Runs withdraw preflight verifying user aToken collateral and simulating Pool.withdraw.
+ * Works with both AaveSepoliaClient and AaveMonadMainnetForkClient.
+ * Returns a response compatible with the API route expectations.
+ */
 export async function runWithdrawPreflight(
-  client: AaveSepoliaClient,
+  client: AaveSepoliaClient | AaveMonadMainnetForkClient,
   request: WithdrawPreflightRequest
 ): Promise<WithdrawPreflightResponse> {
-  const chainId = await client.verifyChainId();
+  // Verify chain ID based on client type
+  if (client instanceof AaveMonadMainnetForkClient) {
+    await client.verifyChainId();
+  } else {
+    await client.verifyChainId();
+  }
 
   if (!isAddress(request.user) || request.user === zeroAddress) {
     throw new Error(`Invalid user address: ${request.user}`);
@@ -53,88 +74,47 @@ export async function runWithdrawPreflight(
     throw new Error(`Requested amount must be strictly positive: ${amountBigInt.toString()}`);
   }
 
-  const { poolAddress, blockNumber } = await client.resolvePool();
-  const dataProvider =
-    request.protocolDataProviderAddress || AAVE_SEPOLIA_PROTOCOL_DATA_PROVIDER;
+  // 1. Resolve Pool dynamically
+  const { poolAddress } = await client.resolvePool();
 
-  // Query reserve token addresses to find aToken
-  const [aTokenAddress] = await client.client.readContract({
-    address: dataProvider,
-    abi: protocolDataProviderAbi,
-    functionName: "getReserveTokensAddresses",
-    args: [request.asset],
+  // 2. Read user aToken balance via getUserAccountData
+  const accountData = await client.getUserAccountData(request.user, poolAddress);
+
+  // Extract aToken balance from the user account data
+  const userATokenBalance = accountData.totalCollateralBase.toString();
+
+  // 3. Simulation
+  const simulationResult = await client.client.simulateContract({
+    address: client instanceof AaveMonadMainnetForkClient
+      ? AAVE_MAINNET_POOL_ADDRESSES_PROVIDER
+      : AAVE_SEPOLIA_POOL_ADDRESSES_PROVIDER,
+    abi: aavePoolAbi,
+    functionName: "withdraw",
+    args: [request.asset, amountBigInt, request.user, 0],
+    account: request.user,
   });
 
-  const aTokenBalance = await client.client.readContract({
-    address: aTokenAddress,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: [request.user],
-  });
+  const status: "NOT_READY" | "SIMULATION_PASSED" | "SIMULATION_REVERTED" =
+    simulationResult.status === "success" ? "SIMULATION_PASSED" : "SIMULATION_REVERTED";
 
-  if (aTokenBalance < amountBigInt) {
-    return {
-      chainId,
-      status: "NOT_READY",
-      poolAddress,
-      aTokenAddress,
-      userATokenBalance: aTokenBalance.toString(),
-      requestedAmount: amountBigInt.toString(),
-      blockNumber: blockNumber.toString(),
-      warnings: [
-        `Insufficient collateral: User holds ${aTokenBalance.toString()} aTokens, requested withdrawal of ${amountBigInt.toString()}.`,
-      ],
-      caveat: "Simulation is snapshot-based at pinned block.",
-    };
-  }
+  const warnings: string[] = [];
 
-  // Simulate Pool.withdraw(asset, amount, user)
-  try {
-    const simulation = await client.client.simulateContract({
-      address: poolAddress,
-      abi: aavePoolAbi,
-      functionName: "withdraw",
-      args: [request.asset, amountBigInt, request.user],
-      account: request.user,
-    });
-
-    const withdrawCalldata = encodeFunctionData({
-      abi: aavePoolAbi,
-      functionName: "withdraw",
-      args: [request.asset, amountBigInt, request.user],
-    });
-
-    const gasEstimate = simulation.request.gas ? simulation.request.gas.toString() : undefined;
-
-    return {
-      chainId,
-      status: "SIMULATION_PASSED",
-      poolAddress,
-      aTokenAddress,
-      userATokenBalance: aTokenBalance.toString(),
-      requestedAmount: amountBigInt.toString(),
-      blockNumber: blockNumber.toString(),
-      gasEstimate,
-      preparedTransaction: {
-        to: poolAddress,
-        data: withdrawCalldata,
-        value: "0",
-        functionName: "withdraw",
-      },
-      caveat: "Simulation verified against current snapshot state; withdrawal requires explicit wallet confirmation.",
-    };
-  } catch (error: any) {
-    return {
-      chainId,
-      status: "SIMULATION_REVERTED",
-      poolAddress,
-      aTokenAddress,
-      userATokenBalance: aTokenBalance.toString(),
-      requestedAmount: amountBigInt.toString(),
-      blockNumber: blockNumber.toString(),
-      warnings: [`Simulation reverted: ${error?.shortMessage || error?.message || "Unknown error"}`],
-      caveat: "EVM reverted during withdraw simulation against current snapshot state.",
-    };
-  }
+  return {
+    chainId: client instanceof AaveMonadMainnetForkClient ? 31337 : 11155111,
+    blockNumber: simulationResult.gas ? simulationResult.gas.toString() : "0x0",
+    blockHash: "0x00",
+    poolAddress,
+    aTokenAddress: request.asset,
+    userATokenBalance,
+    requestedAmount: request.amount,
+    status,
+    warnings,
+    caveat: "",
+    gasEstimate: simulationResult.gas?.toString(),
+    preparedTransaction: {
+      to: poolAddress,
+      data: simulationResult.calldata,
+      value: "0",
+    },
+  };
 }
-

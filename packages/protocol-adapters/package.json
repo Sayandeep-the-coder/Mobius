@@ -1,0 +1,13 @@
+{
+  "name": "@mobius/protocol-adapters",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@mobius/contract-reader": "^1.0.0",
+    "@mobius/contracts-abi": "^1.0.0"
+  }
+}

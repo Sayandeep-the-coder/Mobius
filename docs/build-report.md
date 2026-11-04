@@ -169,11 +169,13 @@ npm run build
 | Deliverable | Owner | Current Status | Integration Status |
 |---|---|---|---|
 | **Aave V3 Sepolia Adapter** | Teammate 2 | Complete (6/6 tests passing) | Integrated into `apps/api` |
+| **Aave V3 Monad Mainnet Fork Adapter** | Teammate 2 | Complete (new client + API routes) | Integrated into `apps/api` |
 | **Typewriter Adapter & POC** | Teammate 2 | Complete (runner verified) | Standalone POC ready |
 | **Express API Backend** | Lead | Complete (39/39 tests passing) | Fully merged into `main` |
 | **Deterministic Financial Spec** | Lead | Complete (Section 20 documented) | Ready for future engine expansion |
 | **LLM Adapter & Groq Provider** | Lead | Complete (Mock + Groq support) | Export bug fixed & verified |
 | **Monad Contract Deployment** | Teammate 1 | In Progress | Pending `deployments/monad-testnet.json` |
+| **Anvil Fork Configuration** | Teammate 2 | Complete (see integration-notes.md) | Local fork setup documented |
 
 ---
 

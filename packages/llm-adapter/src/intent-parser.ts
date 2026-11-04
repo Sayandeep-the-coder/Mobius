@@ -45,7 +45,7 @@ export class IntentParser {
       context: z.object({
         protocol: z.string(),
         actionFamily: z.string(),
-        parameters: z.record(z.string()),
+        parameters: z.record(z.string(), z.string()),
       }),
     });
 
@@ -53,7 +53,7 @@ export class IntentParser {
       ...raw,
       ...(overrides?.chainId !== undefined ? { chainId: overrides.chainId } : {}),
       ...(overrides?.account !== undefined ? { account: overrides.account } : {}),
-    } as AgenticPlanRequest);
+    });
     if (!validated.success) {
       throw new Error(
         `LLM intent failed validation: ${JSON.stringify(validated.error.issues)}`

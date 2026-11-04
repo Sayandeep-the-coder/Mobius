@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:contracts": "cd contracts && forge test -vvv",
+    "test:integration": "node scripts/test-monad-integration.mjs"
   },
   "dependencies": {
     "framer-motion": "^14.9.0",
@@ -14,7 +16,8 @@
     "lucide-react": "^1.65.0",
     "next": "16.4.3",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "viem": "^2.57.16"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",

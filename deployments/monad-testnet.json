@@ -1,0 +1,22 @@
+{
+  "chainId": 10143,
+  "network": "Monad Testnet",
+  "rpcUrl": "https://testnet-rpc.monad.xyz",
+  "contracts": {
+    "MockSwapTarget": "0xA64c3bA49910baa01515360278AA2542AaAD0219"
+  },
+  "deployment": {
+    "deployer": "0x2345ff8Ca8cf8c504F01d26F7064Ef7cb31Dc75D",
+    "transactionHash": "0x465de4362c59dbbb9b4f4e6e489e5d34ab17cfe32bdde8c9f13f6a73a5bcc02e",
+    "blockNumber": 76872485,
+    "timestamp": "2026-11-04T08:52:00Z",
+    "gasUsed": 350509,
+    "gasPaidMon": "0.036102427000350509",
+    "verification": {
+      "status": "verified",
+      "verifier": "sourcify",
+      "verifierUrl": "https://sourcify-api-monad.blockvision.org/verify-ui/jobs/23496e23-5297-41f3-89ca-fe5019fb0318",
+      "explorerUrl": "https://testnet.monadscan.com/address/0xA64c3bA49910baa01515360278AA2542AaAD0219"
+    }
+  }
+}

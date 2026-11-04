@@ -29,39 +29,107 @@ Mobius is **not** just an `eth_call` wrapper, not a portfolio dashboard, and not
 
 **AI never invents Health Factors, guesses oracle prices, or independently decides whether a position is safe.** If a deterministic optimizer can find the best repair, AI is not needed for that part.
 
-## Architecture at a Glance
+## Full System Architecture & Execution Flow
 
+```mermaid
+flowchart TD
+    subgraph S1["1 - Security Gate"]
+        User["User / Autonomous Agent"] --> IdVerif["Identity & Signature Verification"]
+        IdVerif --> PermEngine["Permission Engine\n(Allowlists + Spend & Execution Limits)"]
+    end
+
+    subgraph S2["2 - Intent & Constraints"]
+        PermEngine --> IntentParser["Intent Parser\n(Typed Objective + Hard Constraints)"]
+    end
+
+    subgraph S3["3 - Read On-Chain"]
+        IntentParser --> StateAcq["State Acquisition"]
+        StateAcq --> SnapMgr["Snapshot Manager\n(chainId + blockNumber + blockHash + fingerprint)"]
+    end
+
+    subgraph S4["4 - Pre-flight & Simulate"]
+        SnapMgr --> Planner["Agentic Planner\n(Candidate plans from approved templates)"]
+        Planner --> SimEngine["Simulation Engine"]
+        SimEngine --> BranchSingle["Single-call\n(eth_call at pinned block)"]
+        SimEngine --> BranchMulti["Multi-step\n(Isolated Anvil fork)"]
+        SimEngine --> BranchScen["Counterfactual Scenarios\n(Price / Liquidity / Balance)"]
+        BranchSingle --> SimResults["Simulation Results\n(Real EVM, NOT LLM)"]
+        BranchMulti --> SimResults
+        BranchScen --> SimResults
+        SimResults --> PolicyEval["Hard Policy Evaluator\n(Deterministic hard constraints)"]
+        PolicyEval --> AcceptCheck{"Acceptable plan?"}
+        AcceptCheck -- "No (Replan)" --> Planner
+    end
+
+    subgraph S5["5 - Pre-flight 2 / Revalidation Gate"]
+        AcceptCheck -- "Yes" --> FreshSim["Fresh-State Revalidation\n(Re-read deps + re-simulate exact calldata)"]
+        FreshSim --> DriftCheck{"Relevant state\nchanged?"}
+    end
+
+    DriftCheck -- "Yes: REPLAN_REQUIRED / BLOCKED" --> IntentParser
+
+    subgraph S6["6 - Authorize"]
+        DriftCheck -- "No: VALID" --> ExecAuth["Execution Authorization Form\n(Review + display + expiry check)"]
+        ExecAuth --> UserKeys["User / Scoped Credential Keys\n(Mobius NEVER signs user transactions)"]
+    end
+
+    subgraph S7["7 - Route & Execute"]
+        UserKeys --> ExecRouter["Execution Router"]
+        ExecRouter --> AaveRoute["Aave V3 Adapter\n(Supply / Withdraw only)"]
+        ExecRouter --> TypewriterRoute["Typewriter Adapter\n(Compatible mutations only)"]
+        ExecRouter --> StandardRoute["Standard Monad RPC"]
+
+        AaveRoute --> SepoliaChain["Ethereum Sepolia\n(Chain ID 11155111)"]
+        TypewriterRoute --> TypewriterApp["Typewriter App\n(Monad Testnet 10143)"]
+        StandardRoute --> MonadChain["Monad Testnet\n(Chain ID 10143)"]
+    end
+
+    subgraph S8["8 - Monitor"]
+        SepoliaChain --> ExecMonitor["Execution Monitor\n(submitted → included → safe → finalized)"]
+        TypewriterApp --> ExecMonitor
+        MonadChain --> ExecMonitor
+        ExecMonitor --> OutcomeVerif["Outcome Verification\n(Predicted vs Actual)"]
+        OutcomeVerif -- "Feedback if state deviated" --> IntentParser
+        ExecMonitor --> AuditLogs[("Audit Logs & Security Events")]
+    end
+
+    classDef gateClass fill:#2d3748,stroke:#cbd5e0,stroke-width:2px,color:#fff;
+    classDef rejectClass fill:#742a2a,stroke:#feb2b2,stroke-width:2px,color:#fff;
+    classDef approveClass fill:#22543d,stroke:#9ae6b4,stroke-width:2px,color:#fff;
+    class S1,S2,S3,S4,S5,S6,S7,S8 gateClass;
 ```
-USER / AGENT: objective + constraints
-        |
-        v
-MOBIUS API: validate schema, chain, identity, policy, authorization
-        |
-        v
-PLANNER: typed intent + candidate strategies (rules first; LLM may assist)
-        |
-        v
-SNAPSHOT MANAGER: pinned block/hash + relevant state fingerprint
-        |
-        v
-SIMULATION ENGINE:
-  - one call: eth_call against pinned block
-  - multi-step: isolated Anvil fork per candidate
-        |
-        v
-POLICY EVALUATOR: decode results, check hard constraints, rank feasible plans
-        |
-        v
-REVALIDATION: re-read dependencies + re-simulate exact action(s)
-        |
-        v
-EXECUTION ROUTER:
-  - standard wallet/RPC for supported contracts and DeFi protocols
-  - Typewriter for compatible Monad application mutations only
-        |
-        v
-SETTLEMENT MONITOR: included/safe/finalized + predicted-vs-actual audit
-```
+
+### The 8 Architectural Stages in Detail
+
+1. **Stage 1 — Security Gate:**
+   - Authenticates the calling user or autonomous agent.
+   - Enforces deterministic permission policies: allowlisted chains, allowed action families, per-action and per-session spend limits.
+2. **Stage 2 — Intent & Constraints:**
+   - Converts natural-language or structured agent requests into typed objectives (`minAmountOut`, `maxSlippageBps`, `maxInputAmount`, `maxGasWei`, `minHealthFactor`).
+   - Hard constraints can never be relaxed by an LLM.
+3. **Stage 3 — Read On-Chain (State Acquisition):**
+   - Snapshot Manager pins `chainId`, `blockNumber`, `blockHash`, timestamp, and computes a cryptographically verifiable **dependency fingerprint** (`rateWad`, oracle answer, reserve liquidity, user balance, allowance).
+4. **Stage 4 — Pre-flight & Simulate:**
+   - **Agentic Planner:** Generates typed candidate strategies from approved templates (e.g. `candidate_swap` vs `candidate_hold`).
+   - **Simulation Engine:**
+     - *Single-call:* `eth_call` at pinned block number via Viem.
+     - *Multi-step:* Isolated local Anvil fork per candidate (state is preserved across multi-step transactions without cross-contaminating candidates).
+     - *Counterfactual scenarios:* Stress tests across price/liquidity drifts.
+   - **EVM Simulation Results:** Simulation output is derived strictly from the EVM execution, never fabricated by an LLM.
+   - **Hard Policy Evaluator:** Filters out any candidate violating hard constraints. If no candidate passes, loops back to replan or returns `BLOCKED`.
+5. **Stage 5 — Pre-flight 2 / Revalidation Gate:**
+   - Immediately before presenting to the user for signature, Mobius re-reads critical dependencies from the latest block and re-computes the state fingerprint.
+   - If relevant state has drifted or the call now reverts, returns `REPLAN_REQUIRED` or `BLOCKED`. It **never** silently lowers the user's minimum output or loosens constraints.
+6. **Stage 6 — Authorize:**
+   - Prepares an explicit execution authorization view for human review.
+   - Scoped credential or user wallet signs. **Mobius backend NEVER holds custody or signs user transactions.**
+7. **Stage 7 — Route & Execute:**
+   - **Aave V3 Route (Sepolia `11155111`):** Dynamic pool resolution, 2-step approval gate, and supply/withdraw execution.
+   - **Typewriter Route (Monad Testnet `10143`):** Submits signed application mutations to Typewriter sequencer (local EVM preconfirmation).
+   - **Standard RPC Route (Monad Testnet `10143`):** Direct wallet submission for standard smart contracts.
+8. **Stage 8 — Monitor:**
+   - Tracks settlement lifecycle: `submitted` → `included` → `safe` → `finalized`.
+   - **Outcome Verification:** Compares predicted state deltas against actual receipt events and logs feedback for future planning. Writes to immutable security audit logs.
 
 ### The Three Mobius Engines
 
@@ -197,15 +265,69 @@ export interface AgenticPlanResponse {
 }
 ```
 
-## MockSwapTarget (Monad Testnet Demo Contract)
+## MockSwapTarget (Monad Testnet Demo Contract — Teammate 1 Scope)
 
-A deterministic simulation harness, **not a real DEX**. It does not exchange tokens or custody assets.
+A deterministic simulation harness, **not a real DEX**. It does not exchange tokens or custody assets. Its sole purpose is to model a quote-dependent execution condition so Mobius can prove stale-quote detection and revalidation.
 
-- `rateWad` — owner-updatable rate
-- `quote(amountIn)` — view, returns simulated output
-- `swap(amountIn, minOut)` — reverts `SlippageExceeded` if output < minOut
-- Custom errors: `SlippageExceeded`, `InvalidAmount`, `OnlyOwner`
-- Deployed to Monad Testnet (chain ID 10143)
+- **Contract:** `contracts/src/MockSwapTarget.sol`
+  - `rateWad`: owner-updatable exchange rate (scaled to 1e18 WAD)
+  - `quote(amountIn)`: view function returning simulated output `(amountIn * rateWad) / 1e18`
+  - `swap(amountIn, minOut)`: executes simulated swap, reverts with `SlippageExceeded` if output < minOut
+  - `totalSimulatedOutput`: tracks cumulative simulated output
+  - Custom errors: `SlippageExceeded(actualOut, minOut)`, `InvalidAmount()`, `OnlyOwner()`, `InvalidRate()`
+  - Events: `RateUpdated(oldRate, newRate)`, `SimulatedSwap(trader, amountIn, amountOut, minOut)`
+
+### Testing & Validation Suite (`contracts/test/MockSwapTarget.t.sol`)
+Comprehensive Foundry test suite covering:
+1. **Initial State:** Deployer ownership, initial `rateWad = 1e18`, `totalSimulatedOutput = 0`.
+2. **Quote Accuracy:** 1:1 at 1e18, 150:100 at 1.5e18, 50:100 at 0.5e18.
+3. **Access Control:** `OnlyOwner` revert on unauthorized rate updates.
+4. **Input Validation:** `InvalidRate` on 0 rate, `InvalidAmount` on 0 amount.
+5. **Slippage Enforcement:** Exact revert `SlippageExceeded(actualOut, minOut)` when quote < minOut.
+6. **Stale Quote Scenario (TOCTOU Proof):**
+   - Trader reads quote at rate `1e18` (quote = 100).
+   - Target rate changes onchain to `0.8e18`.
+   - Trader submits transaction with planned `minOut = 100` -> Reverts with `SlippageExceeded(80, 100)`.
+   - Replanning with refreshed quote `80` succeeds and updates `totalSimulatedOutput`.
+7. **Fuzz Testing:** Property-based tests for arbitrary `amountIn`, `rateWad`, and `slippageBps`.
+
+```bash
+# Run tests
+cd contracts
+forge test -vvv
+```
+
+### Deployment & Verification (`contracts/script/DeployMockSwapTarget.s.sol`)
+```bash
+# 1. Set environment variables
+export MONAD_RPC_URL="https://testnet-rpc.monad.xyz"
+
+# 2. Deploy using Foundry script or forge create
+forge script script/DeployMockSwapTarget.s.sol \
+  --rpc-url "$MONAD_RPC_URL" \
+  --account mobius-deployer \
+  --broadcast
+
+# 3. Verify on Monad Sourcify verifier
+forge verify-contract \
+  "$MOCK_SWAP_TARGET" \
+  src/MockSwapTarget.sol:MockSwapTarget \
+  --chain 10143 \
+  --verifier sourcify \
+  --verifier-url https://sourcify-api-monad.blockvision.org
+```
+
+### Live Monad Testnet Deployment (Verified)
+- **Contract Address:** `0xA64c3bA49910baa01515360278AA2542AaAD0219`
+- **Deployer / Owner:** `0x2345ff8Ca8cf8c504F01d26F7064Ef7cb31Dc75D`
+- **Transaction Hash:** `0x465de4362c59dbbb9b4f4e6e489e5d34ab17cfe32bdde8c9f13f6a73a5bcc02e`
+- **Block:** `76872485`
+- **Sourcify Verification Job:** `23496e23-5297-41f3-89ca-fe5019fb0318`
+- **Monad Explorer:** [View on Monadscan](https://testnet.monadscan.com/address/0xA64c3bA49910baa01515360278AA2542AaAD0219)
+- **Run Live Integration Suite:**
+  ```bash
+  npm run test:integration
+  ```
 
 ## Aave V3 Sepolia Integration
 

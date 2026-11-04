@@ -18,7 +18,7 @@ export class CandidateProposer {
     constraints: Record<string, string>,
     allowedStrategies: string[]
   ): Promise<string[]> {
-    if (!this.provider.config.enabled) {
+    if (!this.provider.config?.enabled) {
       return this.defaultStrategies.filter((s) => allowedStrategies.includes(s));
     }
 

@@ -1,82 +1,199 @@
 import { Router } from "express";
 import { z } from "zod";
-import { sepoliaPublicClient } from "@mobius/chain-config";
-import type { AaveSupplyPreflightRequest, AaveSupplyPreflightResponse } from "@mobius/contracts-abi";
+import {
+  AaveSepoliaClient,
+  runSupplyPreflight,
+  runWithdrawPreflight,
+  AAVE_SEPOLIA_POOL_ADDRESSES_PROVIDER,
+  AAVE_SEPOLIA_DAI,
+} from "@mobius/aave-adapter";
+import type {
+  AaveSupplyPreflightRequest,
+  AaveSupplyPreflightResponse,
+  AaveWithdrawPreflightRequest,
+  AaveWithdrawPreflightResponse,
+} from "@mobius/contracts-abi";
 
 export const aaveRoutes = Router();
+const client = new AaveSepoliaClient();
 
-const supplyPreflightSchema = z.object({
-  user: z.string().refine((v) => /^0x[0-9a-fA-F]{40}$/.test(v), {
-    message: "Invalid 'user' address",
-  }),
-  asset: z.string().refine((v) => /^0x[0-9a-fA-F]{40}$/.test(v), {
-    message: "Invalid 'asset' address",
-  }),
-  amount: z.string().refine((v) => /^\d+$/.test(v), {
+const addressSchema = z.string().refine((v): v is `0x${string}` => /^0x[0-9a-fA-F]{40}$/.test(v), {
+  message: "Invalid Ethereum address (expected 20-byte hex starting with 0x)",
+});
+
+const preflightSchema = z.object({
+  user: addressSchema,
+  asset: addressSchema.optional().default(AAVE_SEPOLIA_DAI),
+  amount: z.string().refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, {
     message: "Amount must be a positive decimal string (base units)",
   }),
 });
 
+/**
+ * GET /v1/aave/sepolia/market
+ * Dynamically resolves the Aave V3 Pool on Ethereum Sepolia.
+ */
 aaveRoutes.get("/sepolia/market", async (_req, res) => {
   try {
-    const POOL_ADDRESSES_PROVIDER =
-      "0x012bAC54348C0E635dCAc9D5FB99f06F24136C9A";
-
-    const pool = await sepoliaPublicClient.readContract({
-      address: POOL_ADDRESSES_PROVIDER,
-      abi: [
-        {
-          type: "function",
-          name: "getPool",
-          stateMutability: "view",
-          inputs: [],
-          outputs: [{ name: "", type: "address" }],
-        },
-      ],
-      functionName: "getPool",
-    });
+    const { poolAddress, blockNumber } = await client.resolvePool();
 
     res.json({
       chainId: 11155111,
       network: "Ethereum Sepolia",
-      poolAddressesProvider: POOL_ADDRESSES_PROVIDER,
-      pool,
+      poolAddressesProvider: AAVE_SEPOLIA_POOL_ADDRESSES_PROVIDER,
+      pool: poolAddress,
+      observedAtBlock: blockNumber.toString(),
       note: "Pool resolved dynamically from PoolAddressesProvider.getPool()",
     });
   } catch (err) {
-    res.status(500).json({ error: "Failed to resolve Aave Pool", message: String(err) });
+    res.status(500).json({
+      error: "Failed to resolve Aave Pool",
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 });
 
+/**
+ * POST /v1/aave/sepolia/supply/preflight
+ * Protocol-aware preflight checking balance, allowance, and simulating supply.
+ */
 aaveRoutes.post("/sepolia/supply/preflight", async (req, res) => {
-  const parse = supplyPreflightSchema.safeParse(req.body);
+  const parse = preflightSchema.safeParse(req.body);
   if (!parse.success) {
     res.status(400).json({ error: "Validation failed", issues: parse.error.issues });
     return;
   }
 
   const input: AaveSupplyPreflightRequest = {
-    ...parse.data,
-    user: parse.data.user as `0x${string}`,
-    asset: parse.data.asset as `0x${string}`,
+    user: parse.data.user,
+    asset: parse.data.asset,
+    amount: parse.data.amount,
   };
 
-  // TODO: Implement balance/allowance reads and supply simulation
-  // This is a stub for the one-day MVP
-  const response: AaveSupplyPreflightResponse = {
-    chainId: 11155111,
-    blockNumber: "0",
-    blockHash: "0x00",
-    pool: "0x0000000000000000000000000000000000000000",
-    asset: input.asset,
-    user: input.user,
-    balance: "0",
-    allowance: "0",
-    approvalRequired: true,
-    canSimulateSupply: false,
-    simulationStatus: "NOT_READY",
-    reason: "Aave adapter not yet implemented — balance/allowance reads pending",
+  try {
+    const preflight = await runSupplyPreflight(client, {
+      user: input.user,
+      asset: input.asset,
+      amount: input.amount,
+    });
+
+    const statusMap: Record<string, "NOT_READY" | "PASSED" | "REVERTED"> = {
+      NOT_READY: "NOT_READY",
+      SIMULATION_PASSED: "PASSED",
+      SIMULATION_REVERTED: "REVERTED",
+    };
+
+    const response: AaveSupplyPreflightResponse = {
+      chainId: 11155111,
+      blockNumber: preflight.blockNumber,
+      blockHash: "0x00",
+      pool: preflight.poolAddress,
+      asset: input.asset,
+      user: input.user,
+      balance: preflight.assetMetadata.userBalance,
+      allowance: preflight.assetMetadata.userAllowance,
+      approvalRequired: preflight.approvalRequired,
+      canSimulateSupply: preflight.status === "SIMULATION_PASSED",
+      simulationStatus: statusMap[preflight.status] || "NOT_READY",
+      gasEstimate: preflight.gasEstimate,
+      preparedTransaction: preflight.preparedTransaction,
+      approvalTransaction: preflight.approvalTransaction,
+      reason: preflight.warnings?.join("; "),
+      caveat: preflight.caveat,
+    };
+
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({
+      error: "Supply preflight execution failed",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+/**
+ * POST /v1/aave/sepolia/withdraw/preflight
+ * Verifies user aToken collateral and simulates Pool.withdraw.
+ */
+aaveRoutes.post("/sepolia/withdraw/preflight", async (req, res) => {
+  const parse = preflightSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ error: "Validation failed", issues: parse.error.issues });
+    return;
+  }
+
+  const input: AaveWithdrawPreflightRequest = {
+    user: parse.data.user,
+    asset: parse.data.asset,
+    amount: parse.data.amount,
   };
 
-  res.json(response);
+  try {
+    const preflight = await runWithdrawPreflight(client, {
+      user: input.user,
+      asset: input.asset,
+      amount: input.amount,
+    });
+
+    const statusMap: Record<string, "NOT_READY" | "PASSED" | "REVERTED"> = {
+      NOT_READY: "NOT_READY",
+      SIMULATION_PASSED: "PASSED",
+      SIMULATION_REVERTED: "REVERTED",
+    };
+
+    const response: AaveWithdrawPreflightResponse = {
+      chainId: 11155111,
+      blockNumber: preflight.blockNumber,
+      blockHash: "0x00",
+      pool: preflight.poolAddress,
+      aTokenAddress: preflight.aTokenAddress,
+      userATokenBalance: preflight.userATokenBalance,
+      requestedAmount: preflight.requestedAmount,
+      simulationStatus: statusMap[preflight.status] || "NOT_READY",
+      gasEstimate: preflight.gasEstimate,
+      preparedTransaction: preflight.preparedTransaction,
+      reason: preflight.warnings?.join("; "),
+      caveat: preflight.caveat,
+    };
+
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({
+      error: "Withdraw preflight execution failed",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+/**
+ * GET /v1/aave/sepolia/account/:user
+ * Returns live Aave V3 health factor, collateral, and debt data for a user.
+ */
+aaveRoutes.get("/sepolia/account/:user", async (req, res) => {
+  const parseUser = addressSchema.safeParse(req.params.user);
+  if (!parseUser.success) {
+    res.status(400).json({ error: "Invalid user address format" });
+    return;
+  }
+
+  try {
+    const accountData = await client.getUserAccountData(parseUser.data);
+    res.json({
+      chainId: 11155111,
+      user: parseUser.data,
+      totalCollateralBase: accountData.totalCollateralBase.toString(),
+      totalDebtBase: accountData.totalDebtBase.toString(),
+      availableBorrowsBase: accountData.availableBorrowsBase.toString(),
+      currentLiquidationThreshold: accountData.currentLiquidationThreshold.toString(),
+      ltv: accountData.ltv.toString(),
+      healthFactor: accountData.healthFactor.toString(),
+      healthFactorFormatted: accountData.healthFactorFormatted,
+      observedAtBlock: accountData.observedAtBlock.toString(),
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: "Failed to read Aave user account data",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 });

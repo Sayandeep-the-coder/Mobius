@@ -416,9 +416,13 @@ npm test
 
 ---
 
-## 🚀 How to Set Up in Your Device
+## 🚀 Deployment
 
-### 1. Prerequisites
+### Local Development
+
+See the section below for local setup. For production/deployment on Oracle Cloud + Cloudflare Pages, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+### 1. Prerequisites (Local Development)
 
 - Node.js v20.x or v22.x LTS
 - Git

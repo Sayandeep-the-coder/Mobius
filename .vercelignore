@@ -1,0 +1,10 @@
+# Ignore non-frontend monorepo files on Vercel deployment
+contracts/
+caddy/
+docker-compose.yml
+scripts/
+screenshots/
+docs/
+apps/typewriter-poc/
+*.log
+.git

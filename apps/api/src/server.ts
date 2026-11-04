@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import { monadPublicClient, sepoliaPublicClient, assertChain } from "@mobius/chain-config";
 import { preflightRoutes } from "./routes/preflight";
@@ -43,6 +44,7 @@ app.get("/health", (_req: Request, res: Response) => {
 });
 
 // Mount routes
+app.use("/v1/health", healthRoutes);
 app.use("/v1/chains", chainsRoutes);
 app.use("/v1/preflight", preflightRoutes);
 app.use("/v1/agentic", agenticRoutes);

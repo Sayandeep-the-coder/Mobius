@@ -4,7 +4,7 @@ import {
   type Hex,
   encodeFunctionData,
 } from "viem";
-import { simulateCall } from "@mobius/simulation";
+import { simulateCall, AnvilForkRunner } from "@mobius/simulation";
 import { evaluateCandidate, rankCandidates } from "@mobius/policies";
 import type {
   AgenticPlanRequest,
@@ -80,10 +80,17 @@ const AAVE_POOL_ABI = [
 const INTEREST_RATE_MODE_VARIABLE = 2n;
 
 /**
+ * Threshold: candidates with more than one encoded call use the isolated
+ * Anvil fork runner so state persists between steps. Single-call candidates
+ * continue to use eth_call against the pinned snapshot.
+ */
+const MULTI_STEP_THRESHOLD = 1;
+
+/**
  * Orchestrates the agentic planning pipeline:
  * 1. Read pinned snapshot
  * 2. Generate typed candidates
- * 3. Simulate each candidate via eth_call
+ * 3. Simulate each candidate via eth_call (single-call) or isolated Anvil fork (multi-step)
  * 4. Evaluate against hard policy constraints
  * 5. Rank feasible candidates
  * 6. Return EXECUTE / HOLD / HUMAN_REVIEW decision
@@ -262,128 +269,275 @@ export class OrchestrationService {
       );
     }
 
-    // Simulate each candidate against the same snapshot via eth_call
-    const candidates: CandidateResult[] = [];
+    // Initialize isolated Anvil fork runner for multi-step candidates
+    const forkRunner = new AnvilForkRunner({
+      forkUrl: process.env.MONAD_RPC_URL ?? "https://testnet-rpc.monad.xyz",
+      forkBlockNumber: block.number,
+      chainId: request.chainId,
+      port: 8545,
+    });
 
-    for (const raw of rawCalls) {
-      if (raw.encodedCalls.length === 0) {
-        // HOLD candidate — no call to simulate
-        candidates.push({
-          candidateId: raw.candidateId,
-          strategy: raw.strategy,
-          status: "SIMULATION_PASSED" as CandidateStatus,
-          encodedCalls: [],
-          estimatedGas: undefined,
-          expectedStateDelta: {},
-          constraintViolations: [],
-          assumptions: ["No chain state change — hold/defer"],
-          explanation: "Hold/defer — no transaction submitted. Safe default.",
-        });
-        continue;
+    let forkStarted = false;
+
+    try {
+      // Start fork if any candidate has multiple calls
+      const hasMultiStep = rawCalls.some((c) => c.encodedCalls.length > 1);
+      if (hasMultiStep) {
+        await forkRunner.start();
+        forkStarted = true;
       }
 
-      // Simulate the first call via eth_call
-      const call = raw.encodedCalls[0];
-      if (!call) continue;
+      // Simulate each candidate against the same snapshot
+      const candidates: CandidateResult[] = [];
 
-      const simResult = await simulateCall({
-        client,
-        from: request.account as `0x${string}`,
-        to: call.to,
-        data: call.data,
-        value: BigInt(call.value),
-        blockNumber: block.number,
-      });
+      for (const raw of rawCalls) {
+        if (raw.encodedCalls.length === 0) {
+          // HOLD candidate — no call to simulate
+          candidates.push({
+            candidateId: raw.candidateId,
+            strategy: raw.strategy,
+            status: "SIMULATION_PASSED" as CandidateStatus,
+            encodedCalls: [],
+            estimatedGas: undefined,
+            expectedStateDelta: {},
+            constraintViolations: [],
+            assumptions: ["No chain state change — hold/defer"],
+            explanation: "Hold/defer — no transaction submitted. Safe default.",
+          });
+          continue;
+        }
 
-      let status: CandidateStatus = "SIMULATION_PASSED";
-      let gasEstimate: string | undefined;
-      let errorMessage: string | undefined;
-      let selector: `0x${string}` | undefined;
+        // Decide simulation path: single call via eth_call, multi-step via isolated fork
+        if (raw.encodedCalls.length > MULTI_STEP_THRESHOLD && forkStarted) {
+          await this.simulateMultiStepCandidate(
+            candidates,
+            raw,
+            forkRunner,
+            request.account as `0x${string}`,
+            block
+          );
+        } else {
+          await this.simulateSingleCandidate(
+            candidates,
+            raw,
+            client,
+            request.account as `0x${string}`,
+            block.number
+          );
+        }
+      }
 
-      if (simResult.status === "SIMULATION_REVERTED") {
+      // Rank feasible candidates (only action candidates, not HOLD)
+      const actionCandidates = candidates.filter((c) => c.strategy !== "hold_defer");
+      const ranked = rankCandidates(
+        actionCandidates.map((c) => ({
+          candidateId: c.candidateId,
+          status: c.status,
+          estimatedGas: c.estimatedGas,
+        }))
+      );
+
+      const selectedCandidateId = ranked[0];
+      const selected = candidates.find((c) => c.candidateId === selectedCandidateId);
+
+      const decision: PlanDecision =
+        selected?.status === "SIMULATION_PASSED"
+          ? "EXECUTE"
+          : "HOLD";
+
+      const response: AgenticPlanResponse = {
+        planId,
+        snapshot,
+        candidates,
+        selectedCandidateId,
+        decision,
+        decisionReason:
+          decision === "EXECUTE"
+            ? `Candidate ${selectedCandidateId} passed simulation and policy constraints.`
+            : "No candidate satisfied all hard constraints. Holding.",
+        caveat: "Snapshot simulation only. Revalidate before signature; state may drift.",
+      };
+
+      return response;
+    } finally {
+      // Always stop the fork when done
+      if (forkStarted) {
+        await forkRunner.stop();
+      }
+    }
+  }
+
+  /**
+   * Simulate a single-call candidate via eth_call against pinned snapshot.
+   */
+  private async simulateSingleCandidate(
+    candidates: CandidateResult[],
+    raw: {
+      candidateId: string;
+      strategy: string;
+      encodedCalls: Array<{ to: `0x${string}`; data: `0x${string}`; value: string }>;
+      constraints: { minAmountOut?: string; maxAmount?: string };
+    },
+    client: PublicClient,
+    from: `0x${string}`,
+    blockNumber: bigint
+  ): Promise<void> {
+    const call = raw.encodedCalls[0];
+    if (!call) return;
+
+    const simResult = await simulateCall({
+      client,
+      from,
+      to: call.to,
+      data: call.data,
+      value: BigInt(call.value),
+      blockNumber,
+    });
+
+    let status: CandidateStatus = "SIMULATION_PASSED";
+    let gasEstimate: string | undefined;
+    let errorMessage: string | undefined;
+    let selector: `0x${string}` | undefined;
+
+    if (simResult.status === "SIMULATION_REVERTED") {
+      status = "SIMULATION_REVERTED";
+      errorMessage = simResult.error?.message ?? "Unknown revert";
+      const selectorMatch = errorMessage.match(/0x[0-9a-fA-F]{8}/);
+      if (selectorMatch) {
+        selector = selectorMatch[0] as `0x${string}`;
+      }
+    } else {
+      gasEstimate = simResult.gasEstimate;
+    }
+
+    // Evaluate against hard policy constraints.
+    let constraintViolations: string[] = [];
+    if (status !== "SIMULATION_REVERTED") {
+      const policyResult = evaluateCandidate(
+        {
+          status,
+          encodedCalls: raw.encodedCalls,
+          constraintViolations: [],
+          estimatedGas: gasEstimate,
+        },
+        raw.constraints,
+        simResult.returnData
+      );
+
+      constraintViolations = policyResult.violations.map((v) => v.message);
+
+      if (!policyResult.passed) {
+        status = "BLOCKED_BY_POLICY" as CandidateStatus;
+      }
+    }
+
+    // Build error classification if reverted
+    let classifiedError;
+    if (status === "SIMULATION_REVERTED" && errorMessage) {
+      classifiedError = classifyError(errorMessage, selector);
+    }
+
+    candidates.push({
+      candidateId: raw.candidateId,
+      strategy: raw.strategy,
+      status,
+      encodedCalls: raw.encodedCalls,
+      estimatedGas: gasEstimate ?? undefined,
+      expectedStateDelta: {},
+      constraintViolations,
+      assumptions: ["State unchanged since snapshot"],
+      explanation: classifiedError
+        ? `${classifiedError.decodedName}: ${classifiedError.message}. ${classifiedError.recommendation}`
+        : `Candidate simulated successfully against block ${blockNumber}.`,
+    });
+  }
+
+  /**
+   * Simulate a multi-step candidate via isolated Anvil fork.
+   * Each call executes sequentially against the same fork, so state from
+   * step N persists into step N+1.
+   */
+  private async simulateMultiStepCandidate(
+    candidates: CandidateResult[],
+    raw: {
+      candidateId: string;
+      strategy: string;
+      encodedCalls: Array<{ to: `0x${string}`; data: `0x${string}`; value: string }>;
+      constraints: { minAmountOut?: string; maxAmount?: string };
+    },
+    forkRunner: AnvilForkRunner,
+    from: `0x${string}`,
+    block: { number: bigint; hash: `0x${string}` }
+  ): Promise<void> {
+    const forkResults = await forkRunner.executeCalls(
+      raw.encodedCalls.map((c) => ({
+        to: c.to,
+        data: c.data,
+        value: c.value ? BigInt(c.value) : undefined,
+      }))
+    );
+
+    let status: CandidateStatus = "SIMULATION_PASSED";
+    let gasEstimate: string | undefined;
+    let errorMessage: string | undefined;
+    let selector: `0x${string}` | undefined;
+
+    // Find first step that reverted
+    for (const result of forkResults) {
+      if (result.status === "REVERTED") {
         status = "SIMULATION_REVERTED";
-        errorMessage = simResult.error?.message ?? "Unknown revert";
+        errorMessage = result.error ?? "Unknown revert";
+        // Try to extract 4-byte selector from revert message
         const selectorMatch = errorMessage.match(/0x[0-9a-fA-F]{8}/);
         if (selectorMatch) {
           selector = selectorMatch[0] as `0x${string}`;
         }
-      } else {
-        gasEstimate = simResult.gasEstimate;
+        break; // Stop at first revert
       }
-
-      // Evaluate against hard policy constraints.
-      let constraintViolations: string[] = [];
-      if (status !== "SIMULATION_REVERTED") {
-        const policyResult = evaluateCandidate(
-          {
-            status,
-            encodedCalls: raw.encodedCalls,
-            constraintViolations: [],
-            estimatedGas: gasEstimate,
-          },
-          raw.constraints,
-          simResult.returnData
-        );
-
-        constraintViolations = policyResult.violations.map((v) => v.message);
-
-        if (!policyResult.passed) {
-          status = "BLOCKED_BY_POLICY" as CandidateStatus;
-        }
+      if (result.gasUsed) {
+        gasEstimate = result.gasUsed;
       }
-
-      // Build error classification if reverted
-      let classifiedError;
-      if (status === "SIMULATION_REVERTED" && errorMessage) {
-        classifiedError = classifyError(errorMessage, selector);
-      }
-
-      candidates.push({
-        candidateId: raw.candidateId,
-        strategy: raw.strategy,
-        status,
-        encodedCalls: raw.encodedCalls,
-        estimatedGas: gasEstimate ?? undefined,
-        expectedStateDelta: {},
-        constraintViolations,
-        assumptions: ["State unchanged since snapshot"],
-        explanation: classifiedError
-          ? `${classifiedError.decodedName}: ${classifiedError.message}. ${classifiedError.recommendation}`
-          : `Candidate simulated successfully against block ${block.number}.`,
-      });
     }
 
-    // Rank feasible candidates (only action candidates, not HOLD)
-    const actionCandidates = candidates.filter((c) => c.strategy !== "hold_defer");
-    const ranked = rankCandidates(
-      actionCandidates.map((c) => ({
-        candidateId: c.candidateId,
-        status: c.status,
-        estimatedGas: c.estimatedGas,
-      }))
-    );
+    // Evaluate against hard policy constraints.
+    let constraintViolations: string[] = [];
+    if (status !== "SIMULATION_REVERTED") {
+      const policyResult = evaluateCandidate(
+        {
+          status,
+          encodedCalls: raw.encodedCalls,
+          constraintViolations: [],
+          estimatedGas: gasEstimate,
+        },
+        raw.constraints,
+        forkResults[forkResults.length - 1]!.returnData
+      );
 
-    const selectedCandidateId = ranked[0];
-    const selected = candidates.find((c) => c.candidateId === selectedCandidateId);
+      constraintViolations = policyResult.violations.map((v) => v.message);
 
-    const decision: PlanDecision =
-      selected?.status === "SIMULATION_PASSED"
-        ? "EXECUTE"
-        : "HOLD";
+      if (!policyResult.passed) {
+        status = "BLOCKED_BY_POLICY" as CandidateStatus;
+      }
+    }
 
-    const response: AgenticPlanResponse = {
-      planId,
-      snapshot,
-      candidates,
-      selectedCandidateId,
-      decision,
-      decisionReason:
-        decision === "EXECUTE"
-          ? `Candidate ${selectedCandidateId} passed simulation and policy constraints.`
-          : "No candidate satisfied all hard constraints. Holding.",
-      caveat: "Snapshot simulation only. Revalidate before signature; state may drift.",
-    };
+    // Build error classification if reverted
+    let classifiedError;
+    if (status === "SIMULATION_REVERTED" && errorMessage) {
+      classifiedError = classifyError(errorMessage, selector);
+    }
 
-    return response;
+    candidates.push({
+      candidateId: raw.candidateId,
+      strategy: raw.strategy,
+      status,
+      encodedCalls: raw.encodedCalls,
+      estimatedGas: gasEstimate ?? undefined,
+      expectedStateDelta: {},
+      constraintViolations,
+      assumptions: ["Multi-step simulation on isolated Anvil fork"],
+      explanation: classifiedError
+        ? `${classifiedError.decodedName}: ${classifiedError.message}. ${classifiedError.recommendation}`
+        : `Multi-step candidate simulated successfully on isolated fork at block ${block.number}.`,
+    });
   }
 }

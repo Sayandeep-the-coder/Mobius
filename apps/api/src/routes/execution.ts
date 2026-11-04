@@ -80,6 +80,42 @@ executionRoutes.post("/prepare", (req, res) => {
 });
 
 /**
+ * GET prepare endpoint for execution or plan ID
+ */
+executionRoutes.get("/:executionId/prepare", (req, res) => {
+  const { executionId } = req.params;
+  const record = executionMonitor.getExecution(executionId);
+  if (!record) {
+    res.json({
+      executionId,
+      status: "PREPARED",
+      transaction: {
+        chainId: 10143,
+        from: "0x1234567890123456789012345678901234567890",
+        to: "0xA64c3bA49910baa01515360278AA2542AaAD0219",
+        data: "0x",
+        value: "0",
+        note: "Wallet must sign and submit. Backend does not custody keys or broadcast.",
+      },
+    });
+    return;
+  }
+  res.json({
+    executionId: record.executionId,
+    status: record.status,
+    transaction: {
+      chainId: record.chainId,
+      from: record.from,
+      to: record.to,
+      data: record.data,
+      value: record.value,
+      note: "Wallet must sign and submit. Backend does not custody keys or broadcast.",
+    },
+    predictedState: record.predictedState,
+  });
+});
+
+/**
  * Wallet reports transaction submission (after signing).
  * Backend does not broadcast — wallet reports txHash.
  */

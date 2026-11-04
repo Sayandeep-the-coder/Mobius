@@ -11,6 +11,19 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8787";
+    return [
+      {
+        source: "/health",
+        destination: `${backendUrl}/health`,
+      },
+      {
+        source: "/v1/:path*",
+        destination: `${backendUrl}/v1/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

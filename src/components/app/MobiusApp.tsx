@@ -29,8 +29,7 @@ import {
 } from 'lucide-react';
 import { MobiusLogo } from '@/components/common/MobiusLogo';
 import { AppSidebar, type AppSection, type EnvironmentType } from '@/components/layout/AppSidebar';
-import { checkBackendHealth, revalidatePlan } from '@/lib/api-client';
-import { aaveMarket, aaveSupplyPreflight, type AaveMarketResponse, type AaveSupplyPreflightResponse } from '@/lib/api';
+import api, { aaveMarket, aaveSupplyPreflight, type AaveMarketResponse, type AaveSupplyPreflightResponse } from '@/lib/api';
 
 type ModalType = 'receipt' | 'collateral' | 'debt' | 'liquidation' | 'carry' | 'wallet' | null;
 
@@ -88,7 +87,9 @@ export function MobiusApp() {
 
   // Check backend health on mount
   useEffect(() => {
-    checkBackendHealth().then((res) => setBackendLive(res.ok)).catch(() => setBackendLive(true));
+    api.health()
+      .then((res) => setBackendLive(res.status === 'ok'))
+      .catch(() => setBackendLive(false));
   }, []);
 
   // Connect MetaMask or Rabby
@@ -117,37 +118,61 @@ export function MobiusApp() {
   // Run Preflight Checklist
   const handleRunPreflight = async () => {
     setRevalidationStatus('validating');
-    setTimeout(async () => {
-      const res = await revalidatePlan('plan_demo_8245', simulateDrift);
+    try {
+      const res = await api.agenticRevalidate({
+        planId: 'plan_demo_8245',
+        candidateId: 'cand_repay_01',
+        chainId: 10143,
+        targetAddress: '0xA64c3bA49910baa01515360278AA2542AaAD0219',
+      });
       if (res.status === 'REPLAN_REQUIRED' || simulateDrift) {
         setRevalidationStatus('replan_required');
       } else {
         setRevalidationStatus('passed');
       }
-    }, 1100);
+    } catch {
+      setRevalidationStatus(simulateDrift ? 'replan_required' : 'passed');
+    }
   };
 
   // Authorize & Sign
   const handleAuthorize = async () => {
     setIsSigning(true);
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      try {
-        await (window as any).ethereum.request({
-          method: 'personal_sign',
-          params: [
-            `Mobius Risk Rehearsal Authorization\nAction: Repay 2,500 USDC\nTarget: Aave V3 Pool\nSnapshot: #82,451,200\nNetwork: Monad Mainnet Fork`,
-            walletAddress,
-          ],
-        });
-      } catch (e) {
-        console.warn('Signature rejected or bypassed in demo');
-      }
-    }
+    const mockHash = '0x7a8f9c1b4e2d3a5f6e7b8c9d0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b';
+    try {
+      const prep = await api.executionPrepare({
+        planId: 'plan_demo_8245',
+        candidateId: 'cand_repay_01',
+        chainId: 10143,
+        from: '0x1234567890123456789012345678901234567890',
+        to: '0xA64c3bA49910baa01515360278AA2542AaAD0219',
+        data: '0x',
+        value: '0',
+      });
 
-    setTimeout(() => {
+      if (typeof window !== 'undefined' && (window as any).ethereum) {
+        try {
+          await (window as any).ethereum.request({
+            method: 'personal_sign',
+            params: [
+              `Mobius Risk Rehearsal Authorization\nAction: Repay 2,500 USDC\nTarget: Aave V3 Pool\nSnapshot: #82,451,200\nNetwork: Monad Mainnet Fork`,
+              walletAddress,
+            ],
+          });
+        } catch (e) {
+          console.warn('Signature rejected or simulated:', e);
+        }
+      }
+
+      if (prep?.executionId) {
+        await api.executionSubmit(prep.executionId, { txHash: mockHash }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('Execution prepare/submit error:', e);
+    } finally {
       setIsSigning(false);
-      setTxHash('0x7a8f9c1b4e2d3a5f6e7b8c9d0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b');
-    }, 1200);
+      setTxHash(mockHash);
+    }
   };
 
   // Download cryptographic JSON receipt

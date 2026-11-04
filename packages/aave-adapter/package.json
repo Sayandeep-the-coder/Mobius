@@ -7,9 +7,11 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "node --test dist/test/aave-adapter.test.js || tsx test/aave-adapter.test.ts"
+    "test": "node --test dist/test/aave-adapter.test.js || tsx test/aave-adapter.test.ts",
+    "demo:sepolia": "tsx src/run-live-sepolia-demo.ts"
   },
   "dependencies": {
+    "dotenv": "^16.4.5",
     "viem": "^2.21.37",
     "zod": "^3.23.8"
   },
@@ -19,4 +21,3 @@
     "typescript": "^5.6.3"
   }
 }
-

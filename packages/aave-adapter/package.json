@@ -1,6 +1,7 @@
 {
   "name": "@mobius/aave-adapter",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "description": "Mobius Aave V3 Sepolia protocol adapter and preflight simulator",
   "main": "dist/index.js",

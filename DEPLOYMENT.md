@@ -73,12 +73,13 @@ Background Worker: Render Worker Service (free tier)
 
 1. Click **"New +"** → **"Web Service"**
 2. Connect your GitHub repository: `Sayandeep-the-coder/Mobius`
-3. Configure:
+3. Configure settings:
    - **Name:** `mobius-api`
-   - **Root Directory:** `apps/api`
-   - **Runtime:** `Docker` (or use Dockerfile)
-   - **Build Command:** `npm ci && npm run build`
-   - **Start Command:** `npm start`
+   - **Region:** Choose closest to you (e.g. Oregon / Frankfurt / Singapore)
+   - **Root Directory:** *(leave blank so Render can access shared `packages/`)*
+   - **Runtime:** `Node` (Recommended) OR `Docker` using the root `./Dockerfile`
+   - **Build Command:** `npm install --legacy-peer-deps && cd apps/api && npm install --legacy-peer-deps`
+   - **Start Command:** `cd apps/api && npm start`
    - **Instance Type:** `Free`
 4. Add Environment Variables:
    ```

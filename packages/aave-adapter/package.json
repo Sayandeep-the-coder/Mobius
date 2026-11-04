@@ -1,10 +1,14 @@
 {
   "name": "@mobius/aave-adapter",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
+  "type": "module",
   "description": "Mobius Aave V3 Sepolia protocol adapter and preflight simulator",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "build": "tsc",
     "test": "node --test dist/test/aave-adapter.test.js || tsx test/aave-adapter.test.ts",

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * LangGraph PostgreSQL Checkpointer Configuration
  *

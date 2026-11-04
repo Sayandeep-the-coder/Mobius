@@ -1,7 +1,19 @@
-import { type PublicClient, type Address, type Hex, encodeFunctionData, parseAbiParameters } from "viem";
+import {
+  type PublicClient,
+  type Address,
+  type Hex,
+  encodeFunctionData,
+} from "viem";
 import { simulateCall } from "@mobius/simulation";
 import { evaluateCandidate, rankCandidates } from "@mobius/policies";
-import type { AgenticPlanRequest, AgenticPlanResponse, CandidateResult, CandidateStatus, PlanDecision, StateSnapshot } from "@mobius/contracts-abi";
+import type {
+  AgenticPlanRequest,
+  AgenticPlanResponse,
+  CandidateResult,
+  CandidateStatus,
+  PlanDecision,
+  StateSnapshot,
+} from "@mobius/contracts-abi";
 import { classifyError } from "./error-classifier";
 import { snapshotService } from "./snapshot-service";
 
@@ -23,21 +35,64 @@ const MOCK_SWAP_ABI = [
 ] as const;
 
 /**
+ * Aave V3 Pool ABI subset for repay and supply.
+ */
+const AAVE_POOL_ABI = [
+  {
+    type: "function",
+    name: "repay",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "interestRateMode", type: "uint256" },
+      { name: "onBehalfOf", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "supply",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "onBehalfOf", type: "address" },
+      { name: "referralCode", type: "uint16" },
+    ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setUserReserveCollateral",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "asset", type: "address" },
+      { name: "useAsCollateral", type: "bool" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+/**
+ * Interest rate mode for Aave V3: 2 = variable.
+ */
+const INTEREST_RATE_MODE_VARIABLE = 2n;
+
+/**
  * Orchestrates the agentic planning pipeline:
  * 1. Read pinned snapshot
  * 2. Generate typed candidates
- * 3. Simulate each candidate
+ * 3. Simulate each candidate via eth_call
  * 4. Evaluate against hard policy constraints
  * 5. Rank feasible candidates
  * 6. Return EXECUTE / HOLD / HUMAN_REVIEW decision
  */
 export class OrchestrationService {
   /**
-   * Build candidates for the one-day MockSwapTarget demo.
-   * Reads amountIn and minOut from context.parameters.
-   * Returns deterministic templates — LLM may assist intent but not supply trusted state.
+   * Build MockSwapTarget candidates: swap + hold.
    */
-  static buildCandidates(
+  static buildMockSwapCandidates(
     planId: string,
     from: `0x${string}`,
     target: `0x${string}`,
@@ -49,7 +104,6 @@ export class OrchestrationService {
     encodedCalls: Array<{ to: `0x${string}`; data: `0x${string}`; value: string }>;
     constraints: { minAmountOut?: string };
   }> {
-    // Encode swap(amountIn, minOut) calldata using viem
     const swapData = encodeFunctionData({
       abi: MOCK_SWAP_ABI,
       functionName: "swap",
@@ -73,13 +127,73 @@ export class OrchestrationService {
   }
 
   /**
+   * Build Aave V3 candidates: repay_debt, add_collateral, hold_defer.
+   */
+  static buildAaveCandidates(
+    planId: string,
+    from: `0x${string}`,
+    poolAddress: `0x${string}`,
+    asset: `0x${string}`,
+    amount: string
+  ): Array<{
+    candidateId: string;
+    strategy: string;
+    encodedCalls: Array<{ to: `0x${string}`; data: `0x${string}`; value: string }>;
+    constraints: { maxAmount?: string };
+  }> {
+    const amountBigInt = BigInt(amount);
+
+    // repay: Pool.repay(asset, amount, 2 /* variable */, user)
+    const repayData = encodeFunctionData({
+      abi: AAVE_POOL_ABI,
+      functionName: "repay",
+      args: [asset, amountBigInt, INTEREST_RATE_MODE_VARIABLE, from],
+    });
+
+    // addCollateral: Pool.supply(asset, amount, user, 0) + setUserReserveCollateral(asset, true)
+    const supplyData = encodeFunctionData({
+      abi: AAVE_POOL_ABI,
+      functionName: "supply",
+      args: [asset, amountBigInt, from, 0],
+    });
+    const enableCollateralData = encodeFunctionData({
+      abi: AAVE_POOL_ABI,
+      functionName: "setUserReserveCollateral",
+      args: [asset, true],
+    });
+
+    return [
+      {
+        candidateId: `${planId}_repay_debt`,
+        strategy: "repay_debt",
+        encodedCalls: [{ to: poolAddress, data: repayData as Hex, value: "0" }],
+        constraints: { maxAmount: amount },
+      },
+      {
+        candidateId: `${planId}_add_collateral`,
+        strategy: "add_collateral",
+        encodedCalls: [
+          { to: poolAddress, data: supplyData as Hex, value: "0" },
+          { to: poolAddress, data: enableCollateralData as Hex, value: "0" },
+        ],
+        constraints: { maxAmount: amount },
+      },
+      {
+        candidateId: `${planId}_hold`,
+        strategy: "hold_defer",
+        encodedCalls: [],
+        constraints: {},
+      },
+    ];
+  }
+
+  /**
    * Run the full planning pipeline.
-   * Stores the snapshot so revalidation can compare against it later.
    */
   async plan(
     client: PublicClient,
     request: AgenticPlanRequest,
-    targetAddress: `0x${string}`
+    targetAddress?: `0x${string}`
   ): Promise<AgenticPlanResponse> {
     const block = await client.getBlock();
     if (block.number === null || block.hash === null) {
@@ -96,27 +210,59 @@ export class OrchestrationService {
       stateFingerprint: `fp_${block.number}_${block.hash}`,
       dependencies: [
         { label: "block", valueHash: block.number.toString() },
-        { label: "target", address: targetAddress, valueHash: "mockswap-target" },
+        ...(targetAddress
+          ? [{ label: "target", address: targetAddress, valueHash: "mockswap-target" }]
+          : []),
+        ...(request.context.parameters.asset
+          ? [
+              {
+                label: "asset",
+                address: request.context.parameters.asset as `0x${string}`,
+                valueHash: "aave-asset",
+              },
+            ]
+          : []),
       ],
     };
 
     // Store snapshot for revalidation lookup by planId
     snapshotService.storeByPlanId(planId, snapshot);
 
-    // Parse amountIn and minOut from context parameters
-    const amountIn = request.context.parameters.amountIn ?? "0";
-    const minOut = request.context.parameters.minOut ?? "0";
+    // Build candidates based on protocol
+    const protocol = request.context.protocol;
+    const isAave = protocol === "AaveV3" || protocol === "aave";
 
-    // Build deterministic candidates from real parameters
-    const rawCalls = OrchestrationService.buildCandidates(
-      planId,
-      request.account as `0x${string}`,
-      targetAddress,
-      amountIn,
-      minOut
-    );
+    let rawCalls: Array<{
+      candidateId: string;
+      strategy: string;
+      encodedCalls: Array<{ to: `0x${string}`; data: `0x${string}`; value: string }>;
+      constraints: { minAmountOut?: string; maxAmount?: string };
+    }>;
 
-    // Simulate each candidate against the same snapshot
+    if (isAave) {
+      const asset = request.context.parameters.asset as `0x${string}`;
+      const amount = request.context.parameters.amount ?? "0";
+      rawCalls = OrchestrationService.buildAaveCandidates(
+        planId,
+        request.account as `0x${string}`,
+        targetAddress as `0x${string}`,
+        asset,
+        amount
+      );
+    } else {
+      // Default: MockSwapTarget
+      const amountIn = request.context.parameters.amountIn ?? "0";
+      const minOut = request.context.parameters.minOut ?? "0";
+      rawCalls = OrchestrationService.buildMockSwapCandidates(
+        planId,
+        request.account as `0x${string}`,
+        targetAddress as `0x${string}`,
+        amountIn,
+        minOut
+      );
+    }
+
+    // Simulate each candidate against the same snapshot via eth_call
     const candidates: CandidateResult[] = [];
 
     for (const raw of rawCalls) {
@@ -136,8 +282,10 @@ export class OrchestrationService {
         continue;
       }
 
+      // Simulate the first call via eth_call
       const call = raw.encodedCalls[0];
       if (!call) continue;
+
       const simResult = await simulateCall({
         client,
         from: request.account as `0x${string}`,
@@ -164,11 +312,15 @@ export class OrchestrationService {
       }
 
       // Evaluate against hard policy constraints.
-      // Preserve SIMULATION_REVERTED — don't downgrade it to BLOCKED_BY_POLICY.
       let constraintViolations: string[] = [];
       if (status !== "SIMULATION_REVERTED") {
         const policyResult = evaluateCandidate(
-          { status, encodedCalls: raw.encodedCalls, constraintViolations: [], estimatedGas: gasEstimate },
+          {
+            status,
+            encodedCalls: raw.encodedCalls,
+            constraintViolations: [],
+            estimatedGas: gasEstimate,
+          },
           raw.constraints,
           simResult.returnData
         );
@@ -194,7 +346,7 @@ export class OrchestrationService {
         estimatedGas: gasEstimate ?? undefined,
         expectedStateDelta: {},
         constraintViolations,
-        assumptions: ["rateWad unchanged since snapshot"],
+        assumptions: ["State unchanged since snapshot"],
         explanation: classifiedError
           ? `${classifiedError.decodedName}: ${classifiedError.message}. ${classifiedError.recommendation}`
           : `Candidate simulated successfully against block ${block.number}.`,

@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
+import { executionMonitor, type PredictedState } from "../services/execution-monitor";
 
 /**
- * Execution router — prepares validated wallet transaction requests.
+ * Execution router — prepares validated wallet transaction requests
+ * and monitors settlement lifecycle with predicted-vs-observed comparison.
  * The backend NEVER signs or broadcasts user transactions.
  */
 export const executionRoutes = Router();
@@ -25,6 +27,15 @@ const prepareSchema = z.object({
   value: z.string().optional(),
 });
 
+/**
+ * Optional predicted state from simulation (for comparison after execution).
+ */
+const predictedStateSchema = z.object({
+  healthFactor: z.string().optional(),
+  liquidationDistance: z.string().optional(),
+  carry: z.string().optional(),
+});
+
 executionRoutes.post("/prepare", (req, res) => {
   const parse = prepareSchema.safeParse(req.body);
   if (!parse.success) {
@@ -33,6 +44,12 @@ executionRoutes.post("/prepare", (req, res) => {
   }
 
   const input = parse.data;
+
+  // Extract predicted state from request body (optional, from simulation)
+  const predictedState: PredictedState = {};
+  if (req.body.healthFactor) predictedState.healthFactor = req.body.healthFactor;
+  if (req.body.liquidationDistance) predictedState.liquidationDistance = req.body.liquidationDistance;
+  if (req.body.carry) predictedState.carry = req.body.carry;
 
   // Backend does NOT sign or broadcast. Returns validated request for wallet.
   const txRequest = {
@@ -44,14 +61,132 @@ executionRoutes.post("/prepare", (req, res) => {
     note: "Wallet must sign and submit. Backend does not custody keys or broadcast.",
   };
 
-  res.json({ executionId: `exec_${Date.now()}`, transaction: txRequest });
+  const executionId = `exec_${Date.now()}`;
+
+  // Store predicted state for later comparison
+  executionMonitor.recordExecution(
+    executionId,
+    input.planId,
+    input.candidateId,
+    input.chainId,
+    input.from as `0x${string}`,
+    input.to as `0x${string}`,
+    input.data as `0x${string}`,
+    input.value ?? "0",
+    predictedState
+  );
+
+  res.json({ executionId, transaction: txRequest, predictedState });
 });
 
-executionRoutes.get("/:id", (req, res) => {
-  const { id } = req.params;
+/**
+ * Wallet reports transaction submission (after signing).
+ * Backend does not broadcast — wallet reports txHash.
+ */
+executionRoutes.post("/:executionId/submit", (req, res) => {
+  const { executionId } = req.params;
+  const { txHash } = z
+    .object({ txHash: z.string().refine((v) => /^0x[0-9a-fA-F]+$/.test(v)) })
+    .safeParse(req.body)
+    .data ?? {};
+
+  if (!txHash) {
+    res.status(400).json({ error: "txHash is required" });
+    return;
+  }
+
+  const record = executionMonitor.recordSubmission(executionId, txHash as `0x${string}`);
+  if (!record) {
+    res.status(404).json({ error: "Execution not found" });
+    return;
+  }
+
+  res.json({ executionId: record.executionId, status: record.status, txHash: record.txHash });
+});
+
+/**
+ * Simulate onchain inclusion (for testing/demo — in production, this
+ * would be triggered by actual block events).
+ */
+executionRoutes.post("/:executionId/include", (req, res) => {
+  const { executionId } = req.params;
+  const { blockNumber, actualState } = z
+    .object({
+      blockNumber: z.string(),
+      actualState: z.record(z.string()).optional(),
+    })
+    .safeParse(req.body)
+    .data ?? {};
+
+  if (!blockNumber) {
+    res.status(400).json({ error: "blockNumber is required" });
+    return;
+  }
+
+  const record = executionMonitor.recordInclusion(
+    executionId,
+    blockNumber,
+    (actualState ?? {}) as { healthFactor?: string; liquidationDistance?: string; carry?: string; [key: string]: string | undefined }
+  );
+  if (!record) {
+    res.status(404).json({ error: "Execution not found" });
+    return;
+  }
+
+  res.json({ executionId: record.executionId, status: record.status, blockNumber: record.blockNumber });
+});
+
+/**
+ * Get execution record with predicted-vs-observed comparison.
+ */
+executionRoutes.get("/:executionId", (req, res) => {
+  const { executionId } = req.params;
+
+  const comparison = executionMonitor.getPredictedVsActual(executionId);
+  if (!comparison) {
+    res.status(404).json({ error: "Execution not found" });
+    return;
+  }
+
+  const { record, comparison: deltas } = comparison;
+
   res.json({
-    executionId: id,
-    status: "submitted",
-    note: "Settlement lifecycle: submitted -> included -> safe -> finalized",
+    executionId: record.executionId,
+    planId: record.planId,
+    candidateId: record.candidateId,
+    chainId: record.chainId,
+    status: record.status,
+    submittedAt: record.submittedAt,
+    includedAt: record.includedAt,
+    safeAt: record.safeAt,
+    finalizedAt: record.finalizedAt,
+    txHash: record.txHash,
+    blockNumber: record.blockNumber,
+    predictedState: record.predictedState,
+    actualState: record.actualState,
+    comparison: deltas,
+    note:
+      "Settlement lifecycle: submitted → included → safe → finalized. " +
+      "Comparison shows predicted (simulated) vs actual (observed) onchain state.",
+  });
+});
+
+/**
+ * List all executions (for debugging/monitoring).
+ */
+executionRoutes.get("/", (_req, res) => {
+  const executions = executionMonitor.getAllExecutions();
+  res.json({
+    count: executions.length,
+    executions: executions.map((e) => ({
+      executionId: e.executionId,
+      planId: e.planId,
+      candidateId: e.candidateId,
+      chainId: e.chainId,
+      status: e.status,
+      submittedAt: e.submittedAt,
+      txHash: e.txHash,
+      blockNumber: e.blockNumber,
+    })),
   });
 });

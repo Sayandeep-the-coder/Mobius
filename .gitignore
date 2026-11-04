@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+out/
+cache/
+artifacts/
+.broadcast/
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keys & secrets
+*.keystore
+*.pem
+*.key
+*.json.secret
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Foundry
+lib/
+
+# IDE
+.idea/
+.vscode/
+
+# Typewriter (local dev)
+vendor/
+typewriter/

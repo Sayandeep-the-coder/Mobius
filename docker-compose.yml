@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8787:8787"
+    depends_on:
+      - postgres
+    networks:
+      - mobious-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: npm run worker
+    env_file: .env
+    depends_on:
+      - postgres
+      - api
+    networks:
+      - mobious-network
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mobious
+      POSTGRES_USER: mobious
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - mobious-network
+
+networks:
+  mobious-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

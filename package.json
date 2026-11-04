@@ -1,34 +1,16 @@
 {
-  "name": "monad_blitz",
-  "version": "0.1.0",
+  "name": "mobious",
+  "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "apps/api",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "test:contracts": "cd contracts && forge test -vvv",
-    "test:integration": "node scripts/test-monad-integration.mjs"
-  },
-  "dependencies": {
-    "dotenv": "^18.0.9",
-    "framer-motion": "^14.9.0",
-    "gsap": "^3.15.0",
-    "lucide-react": "^1.65.0",
-    "next": "16.4.3",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "viem": "^2.57.16"
-  },
-  "devDependencies": {
-    "@tailwindcss/turbopack": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.4.3",
-    "playwright": "^1.64.1",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "dev": "cd apps/api && npm run dev",
+    "build": "cd apps/api && npm run build",
+    "start": "cd apps/api && npm start",
+    "worker": "cd apps/api && npm run worker",
+    "test": "cd apps/api && npm test"
   }
 }

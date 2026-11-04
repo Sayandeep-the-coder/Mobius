@@ -1,0 +1,14 @@
+{
+    email ${CADDY_EMAIL}
+    admin localhost:2019
+}
+
+# Replace with your domain or Cloudflare Tunnel hostname
+${CADDY_DOMAIN} {
+    reverse_proxy localhost:8787
+}
+
+# API subdomain (optional)
+api.${CADDY_DOMAIN} {
+    reverse_proxy localhost:8787
+}

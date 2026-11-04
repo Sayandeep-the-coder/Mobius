@@ -682,4 +682,147 @@ const typewriter = await createTypewriter(MobiusAgentApp, {
 
 ---
 
-**End of project memory.** This file should be treated as the source of truth for architectural constraints, chain IDs, file ownership, interfaces, and non-goals across all sessions.
+---
+
+## 20. Deterministic Financial Engine Specification (Revision 3 Playbook Analysis)
+
+**Source:** Mobius One-Day Build Playbook — Architecture Revision 3, November 4, 2026  
+**Source:** Mobious_Whitepaper_v1.0.docx  
+**Status:** Design documented; implementation pending formal specification freeze
+
+### 20.1 Documented Financial Formulations
+
+#### A. Health Factor (simplified explanatory formula)
+
+```
+HF ≈ (CollateralAmount × CollateralPrice × LiquidationThreshold) / (DebtAmount × DebtPrice)
+```
+
+**IMPORTANT:** This is an explanatory formula, NOT the production implementation.
+
+**Production reference:** `Pool.getUserAccountData(account)` on Aave V3 Sepolia.  
+The local financial model must reproduce Aave's actual aggregation, oracle units, token decimals, liquidation thresholds, E-Mode and rounding rules. All local calculations must be tested against on-chain `getUserAccountData` values.
+
+#### B. Risk Envelope (user-defined constraints, enforced by deterministic policy)
+
+| Parameter | Meaning |
+|---|---|
+| `minHealthFactor` | Minimum acceptable post-action health factor |
+| `minStressHealthFactor` | Minimum health factor under specified stress scenarios |
+| `maxLeverage` | Maximum permitted leverage |
+| `maxDebt` | Maximum permitted outstanding debt |
+| `maxSlippageBps` | Maximum tolerated swap slippage |
+| `maxInterventionCost` | Maximum intervention cost and capital lock-up penalty |
+| `allowedAssets` | Permitted assets |
+| `allowedTargets` | Permitted protocol and execution contracts |
+
+**Requirement:** These must be enforced by deterministic policy code. On-chain enforcement where feasible. Never overridable by LLM/agent.
+
+#### C. Cost-Aware Optimization
+
+```
+min_{a ∈ A_permitted} [ w_capital × C_capital_lockup(a) + C_execution(a) + C_carry(a) ]
+```
+
+Subject to:
+```
+HF_current(a) ≥ HF_min
+HF_stress(a,s) ≥ HF_stress_min
+Leverage_after(a) ≤ L_max
+Debt_after(a) ≤ Debt_cap
+```
+
+All assets, calls, and execution targets must be permitted.
+
+**Key design decisions:**
+- Capital locked in collateral, cash spent repaying debt, swap fees, and foregone yield are NOT interchangeable costs.
+- Common reporting units required.
+- Explicit, versioned weights required.
+- Show Pareto comparison when different actions have trade-offs that cannot be reduced to one universal cheapest option.
+
+#### D. Scenario Modelling (reproducible stress scenarios)
+
+| Scenario | Example Input | What Engine Recalculates |
+|---|---|---|
+| Collateral shock | ETH −5%, −10%, −15% | Position valuation and HF |
+| Interest-rate shock | Borrow APY +200 bps over 7 days | Projected debt |
+| Liquidity shock | Available depth reduced by 20% | Swap feasibility and repayment proceeds |
+| Slippage shock | Maximum slippage increases | Minimum output and candidate feasibility |
+| Combined shock | ETH −10%, liquidity −20%, APY +200 bps | Combined position risk |
+
+**Requirement:** These are explicit hypothetical conditions, NOT price predictions. Interest-rate model must account for an explicit time horizon — APY increase does not instantaneously change HF.
+
+### 20.2 Four Cooperating Engine Components
+
+| Component | Input | Process | Output |
+|---|---|---|---|
+| 1. Transaction Intelligence Engine | Transaction request + chain state | Decode calldata → Read dependencies → Simulate one transaction → Classify failure | Pass/revert, state evidence, failure classification |
+| 2. Financial Risk & Repair Engine | Verified position snapshot | Calculate position metrics → Stress-test scenarios → Build candidate actions → Estimate costs | Financially evaluated candidate strategies |
+| 3. Agentic Simulation & Policy Engine | Typed candidates + constraints | Simulate alternatives → Check hard constraints → Reject infeasible → Compare feasible | Validated, ranked candidate plans |
+| 4. Execution Orchestration Engine | Selected candidate | Fresh-state revalidation → Exact transaction simulation → Authorization → Execution → Settlement verification | Verified execution result + decision receipt |
+
+**Critical Separation:** The LLM does NOT perform trusted financial calculations. Its job is to interpret user objective, coordinate tools, and explain results. Deterministic code calculates financial metrics, generates numerical candidate values, applies policy constraints, and evaluates transaction simulation outcomes.
+
+### 20.3 Financial Engine Modules
+
+| Module | Responsibility | Expected Implementation |
+|---|---|---|
+| `AaveAdapter` | Read collateral, debt, reserves, prices, configuration | Viem contract reads |
+| `PositionModel` | Reconstruct position, calculate HF, leverage, equity | Deterministic TypeScript arithmetic |
+| `ScenarioEngine` | Apply price, rate, liquidity shocks | Versioned scenario calculations |
+| `CandidateGenerator` | Generate permitted repair alternatives | Rules-based candidate templates |
+| `CostEvaluator` | Calculate capital lock-up, execution costs, carry | Fixed-point arithmetic |
+| `ConstraintEvaluator` | Enforce user's risk envelope | Hard deterministic checks |
+| `SimulationEngine` | Execute candidate transactions against snapshot | `eth_call` + Anvil |
+| `PlanOptimizer` | Compare feasible candidates | Constrained search / Pareto ranking |
+
+**Initial Candidate Set (MVP):**
+- `HOLD`
+- `REPAY_DEBT`
+- `ADD_COLLATERAL`
+- `SELL_COLLATERAL_AND_REPAY`
+
+Increasing leverage and broader portfolio strategies are excluded from the first MVP.
+
+### 20.4 Missing Specifications (Design Decisions Still Pending)
+
+The following are NOT yet fully specified — they are design decisions requiring formal specification before implementation:
+
+| Missing Specification | Why It Matters |
+|---|---|
+| Exact multi-asset HF reproduction | Must match Aave's precision and aggregation |
+| Debt-index accrual formula | Needed to model changing borrowing rates accurately |
+| Leverage and equity definitions | Needed for consistent position comparisons |
+| Net carry calculation | Needed to compare borrow costs against collateral yield |
+| Swap price-impact model | Needed to estimate sell-to-repay proceeds |
+| Cost normalization | Needed to compare capital locked, cash spent, and fees |
+| Optimizer algorithm and tie-breaking | Needed for reproducible candidate selection |
+| Model calibration and weights | Needed to prevent arbitrary optimization preferences |
+
+**Note:** Whitepaper suggests constrained search or numerical methods, with Model Predictive Control (MPC) as a possible future approach. MPC must be benchmarked against simpler thresholds and fixed policies before claiming superiority.
+
+### 20.5 Recommended Next Step: Freeze Deterministic Financial Engine Specification
+
+Before expanding the product (API Hub, MIP integrations, private settlement), freeze a **Deterministic Financial Engine Specification** containing:
+
+1. Exact formulas and units for position accounting
+2. Aave-compatible health-factor and debt-accrual calculations
+3. Scenario modelling equations and assumptions
+4. Candidate generation and feasibility conditions
+5. Cost function definitions and normalization
+6. Optimization and tie-breaking logic
+7. Golden test cases against Aave contract reads
+8. Numerical precision, rounding, and failure-handling rules
+
+**For the three-minute demo:** One reproducible scenario where inputs, formulas, rejected strategies, and selected strategy can all be explained is sufficient. Not every future optimization feature is needed.
+
+### 20.6 Implementation Guidance
+
+- **Single transactions:** Use `eth_call` against a pinned block.
+- **Multi-step strategies:** Use isolated Anvil forks. Each candidate executed sequentially against a copy of the same starting state. Multiple remote `eth_call` requests do NOT preserve state between calls.
+- **LLM role:** Planner/explainer only. Never trusted for simulation results, gas estimates, state deltas, or financial calculations.
+- **On-chain reference:** `Pool.getUserAccountData(account)` on Aave V3 Sepolia is the ground truth for Health Factor validation.
+
+---
+
+**End of project memory.** This file should be treated as the source of truth for architectural constraints, chain IDs, file ownership, interfaces, non-goals, and financial engine specifications across all sessions.

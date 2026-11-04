@@ -36,7 +36,7 @@ describe("Health Routes", () => {
   it("GET /health returns 200 with status ok", async () => {
     const res = await fetch(`${baseUrl}/health`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.status).toBe("ok");
     expect(body.service).toBe("mobius-api");
   });
@@ -44,7 +44,7 @@ describe("Health Routes", () => {
   it("GET /v1/health returns 200 with status ok", async () => {
     const res = await fetch(`${baseUrl}/v1/health`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as any;
     expect(body.status).toBe("ok");
     expect(body.service).toBe("mobius-api");
   });

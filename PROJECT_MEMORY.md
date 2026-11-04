@@ -858,12 +858,21 @@ The LLM is **allowed** to:
 
 ```
 LLM_ENABLED=false        # Set to "true" to enable LLM features
-LLM_PROVIDER=mock        # mock \| openai \| anthropic
-LLM_MODEL=mock-default
-LLM_API_KEY=             # Only needed for openai/anthropic providers
+LLM_PROVIDER=mock        # mock \| groq | openai | anthropic
+LLM_MODEL=llama-3.1-8b-instant
+LLM_API_KEY=
+
+# Groq (required when LLM_PROVIDER=groq)
+GROQ_API_KEY=
+GROQ_BASE_URL=https://api.groq.com/openai/v1
 ```
 
 **Default: disabled.** The mock provider works without any API key and returns deterministic, safe defaults.
+
+To use Groq:
+1. Get a free API key at [console.groq.com](https://console.groq.com)
+2. Set `LLM_ENABLED=true`, `LLM_PROVIDER=groq`, `GROQ_API_KEY=your_key`
+3. Recommended model: `llama-3.1-8b-instant` (fast, cheap) or `llama-3.1-70b-versatile`
 
 ### 21.4 API Endpoints
 

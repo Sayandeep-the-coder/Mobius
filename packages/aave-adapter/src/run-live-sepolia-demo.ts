@@ -1,4 +1,7 @@
-import "dotenv/config";
+try {
+  const dotenv = await import("dotenv");
+  dotenv.config();
+} catch {}
 import {
   createWalletClient,
   formatUnits,

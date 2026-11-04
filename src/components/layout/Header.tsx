@@ -48,13 +48,12 @@ export function Header({ onOpenAuth, onOpenAnalyze }: HeaderProps) {
           >
             Log in
           </button>
-          <button
-            type="button"
-            onClick={() => (onOpenAnalyze ? onOpenAnalyze() : onOpenAuth('signup'))}
+          <a
+            href="/app"
             className="relative flex shrink-0 items-center justify-center font-semibold leading-none tracking-tight transition-all duration-150 active:scale-[0.97] h-9 rounded-lg px-4 text-sm bg-[#836EF9] text-white hover:bg-[#6E54FF] shadow-sm shadow-[#836EF9]/30 cursor-pointer"
           >
             Launch app
-          </button>
+          </a>
         </div>
       </div>
     </header>

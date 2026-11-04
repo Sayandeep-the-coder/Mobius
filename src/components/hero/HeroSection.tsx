@@ -62,15 +62,21 @@ export function HeroSection({ onOpenAnalyze }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.2, ease: 'easeOut' }}
           >
             <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+              <a
+                href="/app"
+                className="relative flex shrink-0 items-center justify-center font-semibold leading-none tracking-tight transition-all duration-150 active:scale-[0.97] outline-offset-2 focus-visible:outline-2 h-12 rounded-xl px-6 text-base bg-[#836EF9] text-white hover:bg-[#6E54FF] shadow-lg shadow-[#836EF9]/30 cursor-pointer"
+              >
+                Launch App Console →
+              </a>
               <button
                 type="button"
                 onClick={onOpenAnalyze}
-                className="relative flex shrink-0 items-center justify-center font-semibold leading-none tracking-tight transition-all duration-150 active:scale-[0.97] outline-offset-2 focus-visible:outline-2 h-12 rounded-xl px-6 text-base bg-[#836EF9] text-white hover:bg-[#6E54FF] shadow-lg shadow-[#836EF9]/30 cursor-pointer"
+                className="relative flex shrink-0 items-center justify-center font-semibold leading-none tracking-tight transition-all duration-150 active:scale-[0.97] outline-offset-2 focus-visible:outline-2 h-12 rounded-xl px-6 text-base bg-white border border-gray-300 text-gray-800 hover:bg-gray-50 shadow-sm cursor-pointer"
               >
                 Analyze a position
               </button>
               <p className="font-medium text-sm sm:text-base text-gray-500">
-                No wallet connection. No keys. Just a public address.
+                Non-custodial · User-authorized · Verified execution
               </p>
             </div>
           </motion.div>

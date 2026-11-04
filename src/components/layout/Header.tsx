@@ -4,7 +4,7 @@ import React from 'react';
 import { MobiusLogo } from '@/components/common/MobiusLogo';
 
 interface HeaderProps {
-  onOpenAuth: (tab: 'login' | 'signup') => void;
+  onOpenAuth?: (tab: 'login' | 'signup') => void;
   onOpenAnalyze?: () => void;
 }
 
@@ -46,7 +46,7 @@ export function Header({ onOpenAuth, onOpenAnalyze }: HeaderProps) {
         <div className="flex min-h-8 items-center gap-3">
           <button
             type="button"
-            onClick={() => onOpenAuth('login')}
+            onClick={() => onOpenAuth ? onOpenAuth('login') : (window.location.href = '/app')}
             className="text-sm font-medium text-gray-700 hover:text-gray-950 px-2 py-1.5 transition cursor-pointer"
           >
             Log in

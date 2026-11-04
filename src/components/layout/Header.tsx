@@ -7,7 +7,7 @@ import { connectMetaMask, formatAddress, checkExistingConnection } from '@/lib/w
 import { Wallet, ArrowRight, RefreshCw } from 'lucide-react';
 
 interface HeaderProps {
-  onOpenAuth?: (tab: 'login' | 'signup' | 'wallet') => void;
+  onOpenAuth?: (tab: 'login' | 'signup') => void;
   onOpenAnalyze?: () => void;
 }
 

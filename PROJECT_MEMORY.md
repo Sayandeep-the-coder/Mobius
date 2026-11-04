@@ -4,8 +4,19 @@
 **Project:** Mobius — Agentic Transaction Intelligence  
 **Architecture revision:** 2  
 **Date:** 4 November 2026  
-**Working directory:** `D:\Projects\Mobious`  
-**Status:** One-day build prototype (not production)
+**Working directory:** `/Volumes/T7 Shield/Vansh_Workspace/dev/Mobius`  
+**Host Environment:** macOS (Darwin arm64)  
+**Status:** One-day build prototype (Active Development)
+
+---
+
+## Current Workstream Progress Status
+
+| Workstream | Owner | Role & Ownership | Current Progress | Next Step |
+|---|---|---|---|---|
+| **Teammate 1** (You) | Agent B | `contracts/**`, `deployments/monad-testnet.json` | **Complete / Ready to Deploy**: `MockSwapTarget.sol` implemented; `MockSwapTarget.t.sol` comprehensive test suite (unit + stale quote TOCTOU + fuzzing); `DeployMockSwapTarget.s.sol` created; `foundry.toml` configured. | Run local forge tests, obtain user permission for deployer key and test MON, deploy to Monad Testnet (`10143`), verify via Sourcify, record in `deployments/monad-testnet.json`. |
+| **Teammate 2** | Agent C | `packages/aave-adapter/**`, `apps/typewriter-poc/**`, `docs/integration-notes.md` | **Completed on `feat/aave-typewriter`**: Dynamic Pool resolution (`PoolAddressesProvider`), 2-step approval flow, supply/withdraw preflight simulator (6/6 tests passing), Typewriter mutation lifecycle runner. | Merge to `main` when Lead reviews. |
+| **Lead / Backend** | Agent A | `apps/api/**`, `packages/chain-config/**`, `packages/contracts-abi/**`, `packages/simulation/**`, `packages/policies/**` | **In Progress**: Fastify API skeleton, routes (`health`, `chains`, `preflight`, `agentic`, `execution`, `aave`), Viem chain clients, error classifier. | Wire up MockSwapTarget preflight and revalidation using deployed Monad contract address. |
 
 ---
 
@@ -30,6 +41,84 @@ It is **not**:
 | Optimization Engine | Rank feasible repairs by risk/cost/feasibility/objective | Finding best action | LLM overriding hard constraints |
 | Verification Layer | Check recommendations against protocol constraints | Safety guardrails | Being bypassed by LLM |
 | Wallet / User | Sign and submit | Authorization | Backend signing user transactions |
+
+---
+
+## 2.5 Full Architecture Flow (The 8 Execution Stages)
+
+```mermaid
+flowchart TD
+    subgraph S1["1 - Security Gate"]
+        User["User / Autonomous Agent"] --> IdVerif["Identity & Signature Verification"]
+        IdVerif --> PermEngine["Permission Engine\n(Allowlists + Spend & Execution Limits)"]
+    end
+
+    subgraph S2["2 - Intent & Constraints"]
+        PermEngine --> IntentParser["Intent Parser\n(Typed Objective + Hard Constraints)"]
+    end
+
+    subgraph S3["3 - Read On-Chain"]
+        IntentParser --> StateAcq["State Acquisition"]
+        StateAcq --> SnapMgr["Snapshot Manager\n(chainId + blockNumber + blockHash + fingerprint)"]
+    end
+
+    subgraph S4["4 - Pre-flight & Simulate"]
+        SnapMgr --> Planner["Agentic Planner\n(Candidate plans from approved templates)"]
+        Planner --> SimEngine["Simulation Engine"]
+        SimEngine --> BranchSingle["Single-call\n(eth_call at pinned block)"]
+        SimEngine --> BranchMulti["Multi-step\n(Isolated Anvil fork)"]
+        SimEngine --> BranchScen["Counterfactual Scenarios\n(Price / Liquidity / Balance)"]
+        BranchSingle --> SimResults["Simulation Results\n(Real EVM, NOT LLM)"]
+        BranchMulti --> SimResults
+        BranchScen --> SimResults
+        SimResults --> PolicyEval["Hard Policy Evaluator\n(Deterministic hard constraints)"]
+        PolicyEval --> AcceptCheck{"Acceptable plan?"}
+        AcceptCheck -- "No (Replan)" --> Planner
+    end
+
+    subgraph S5["5 - Pre-flight 2 / Revalidation Gate"]
+        AcceptCheck -- "Yes" --> FreshSim["Fresh-State Revalidation\n(Re-read deps + re-simulate exact calldata)"]
+        FreshSim --> DriftCheck{"Relevant state\nchanged?"}
+    end
+
+    DriftCheck -- "Yes: REPLAN_REQUIRED / BLOCKED" --> IntentParser
+
+    subgraph S6["6 - Authorize"]
+        DriftCheck -- "No: VALID" --> ExecAuth["Execution Authorization Form\n(Review + display + expiry check)"]
+        ExecAuth --> UserKeys["User / Scoped Credential Keys\n(Mobius NEVER signs user transactions)"]
+    end
+
+    subgraph S7["7 - Route & Execute"]
+        UserKeys --> ExecRouter["Execution Router"]
+        ExecRouter --> AaveRoute["Aave V3 Adapter\n(Supply / Withdraw only)"]
+        ExecRouter --> TypewriterRoute["Typewriter Adapter\n(Compatible mutations only)"]
+        ExecRouter --> StandardRoute["Standard Monad RPC"]
+
+        AaveRoute --> SepoliaChain["Ethereum Sepolia\n(Chain ID 11155111)"]
+        TypewriterRoute --> TypewriterApp["Typewriter App\n(Monad Testnet 10143)"]
+        StandardRoute --> MonadChain["Monad Testnet\n(Chain ID 10143)"]
+    end
+
+    subgraph S8["8 - Monitor"]
+        SepoliaChain --> ExecMonitor["Execution Monitor\n(submitted → included → safe → finalized)"]
+        TypewriterApp --> ExecMonitor
+        MonadChain --> ExecMonitor
+        ExecMonitor --> OutcomeVerif["Outcome Verification\n(Predicted vs Actual)"]
+        OutcomeVerif -- "Feedback if state deviated" --> IntentParser
+        ExecMonitor --> AuditLogs[("Audit Logs & Security Events")]
+    end
+```
+
+### Stage Summary & Key Guarantees:
+- **Stage 1 (Security Gate):** Identity verification and deterministic permission engine.
+- **Stage 2 (Intent & Constraints):** Typed intent parser. No arbitrary calldata allowed.
+- **Stage 3 (Read On-Chain):** Pinned block state snapshot + dependency fingerprint.
+- **Stage 4 (Pre-flight & Simulate):** Deterministic candidate generation; EVM execution (eth_call or isolated Anvil fork); hard policy evaluation. LLM never decides pass/fail.
+- **Stage 5 (Pre-flight 2 / Revalidation Gate):** Fresh dependency re-check + exact re-simulation right before authorization.
+- **Stage 6 (Authorize):** Clear risk disclosure; user/scoped credentials sign; backend never signs or custodies keys.
+- **Stage 7 (Route & Execute):** Deterministic routing to Aave Sepolia, Typewriter Monad, or standard Monad RPC.
+- **Stage 8 (Monitor):** Full lifecycle tracking (`submitted` -> `included` -> `safe` -> `finalized`), predicted-vs-actual verification, audit logging.
+
 
 ---
 
@@ -679,6 +768,26 @@ const typewriter = await createTypewriter(MobiusAgentApp, {
 - Typewriter token example: https://github.com/monad-developers/typewriter/blob/main/apps/token/README.md
 - Aave V3 testing: https://www.aave.com/docs/aave-v3/smart-contracts/testing-and-debugging
 - Aave address book (Sepolia): https://github.com/aave-dao/aave-address-book/blob/main/src/AaveV3Sepolia.sol
+
+---
+
+## 20. Change History & Future Changes Log
+
+| Timestamp | Workstream / Author | Action / Deliverable | Status / Notes |
+|---|---|---|---|
+| 2026-11-04 12:49 | All | Initial project memory created from Architecture Revision 2 | Baseline established |
+| 2026-11-04 12:53 | Teammate 2 (Agent C) | `feat/aave-typewriter`: Aave V3 Sepolia adapter (`packages/aave-adapter`), Typewriter POC (`apps/typewriter-poc`), `docs/integration-notes.md` | 6/6 tests passing, waiting for merge to main |
+| 2026-11-04 13:10 | Teammate 1 (Agent B) | `contracts/`: Implemented `MockSwapTarget.sol`, `MockSwapTarget.t.sol` (10 unit/TOCTOU/fuzz tests), `DeployMockSwapTarget.s.sol`, `foundry.toml`, `deployments/monad-testnet.json` | Contracts and test suite complete; awaiting user permission for local test run and Monad Testnet deployment |
+| 2026-11-04 13:15 | Teammate 1 & Lead | Updated `README.md` and `PROJECT_MEMORY.md` with complete 8-stage architecture flow, accurate progress matrix, and Foundry testing guide | Current setup updated |
+
+### Future Tasks for Teammate 1:
+1. Obtain user approval to run `forge test -vvv` in `contracts/`.
+2. Generate burner testnet deployer keystore (`mobius-deployer`) using `cast wallet import` or testnet private key from faucet.
+3. Fund deployer with test MON from `https://faucet.monad.xyz`.
+4. Deploy `MockSwapTarget` to Monad Testnet (`chainId: 10143`) via `forge create` or `DeployMockSwapTarget.s.sol`.
+5. Verify contract via Sourcify (`https://sourcify-api-monad.blockvision.org`).
+6. Populate `deployments/monad-testnet.json` with contract address, transaction hash, block number, and Sourcify link.
+7. Conduct onchain rate update test: change `rateWad` from `1e18` to `0.8e18` to enable Lead's agentic revalidation TOCTOU live demonstration.
 
 ---
 

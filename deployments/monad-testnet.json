@@ -1,0 +1,20 @@
+{
+  "chainId": 10143,
+  "network": "Monad Testnet",
+  "rpcUrl": "https://testnet-rpc.monad.xyz",
+  "contracts": {
+    "MockSwapTarget": ""
+  },
+  "deployment": {
+    "deployer": "",
+    "transactionHash": "",
+    "blockNumber": null,
+    "timestamp": "",
+    "verification": {
+      "status": "pending",
+      "verifier": "sourcify",
+      "verifierUrl": "https://sourcify-api-monad.blockvision.org",
+      "explorerUrl": ""
+    }
+  }
+}

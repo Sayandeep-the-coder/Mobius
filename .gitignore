@@ -59,3 +59,4 @@ next-env.d.ts
 # Typewriter (local dev)
 vendor/
 typewriter/
+._*

@@ -30,6 +30,17 @@ import {
 import { MobiusLogo } from '@/components/common/MobiusLogo';
 import { AppSidebar, type AppSection, type EnvironmentType } from '@/components/layout/AppSidebar';
 import api, { aaveMarket, aaveSupplyPreflight, type AaveMarketResponse, type AaveSupplyPreflightResponse } from '@/lib/api';
+import {
+  connectMetaMask,
+  switchToMonadTestnet,
+  checkExistingConnection,
+  disconnectWallet,
+  formatAddress,
+  formatBalance,
+  isMetaMaskAvailable,
+  getEthereumProvider,
+  MONAD_TESTNET_CHAIN_ID,
+} from '@/lib/wallet';
 
 type ModalType = 'receipt' | 'collateral' | 'debt' | 'liquidation' | 'carry' | 'wallet' | null;
 
@@ -38,8 +49,20 @@ export function MobiusApp() {
   const [modalType, setModalType] = useState<ModalType>(null);
 
   // Wallet & Environment state
-  const [walletAddress, setWalletAddress] = useState<string>('0x71C8...A92F');
-  const [walletConnected, setWalletConnected] = useState<boolean>(true);
+  const [walletAddress, setWalletAddress] = useState<string>('');
+  const [rawAddress, setRawAddress] = useState<string | null>(null);
+  const [walletConnected, setWalletConnected] = useState<boolean>(false);
+  const [walletBalance, setWalletBalance] = useState<string>('0.000 MON');
+  const [chainId, setChainId] = useState<number | null>(null);
+  const [isMetaMaskDetected, setIsMetaMaskDetected] = useState<boolean>(false);
+  const [isConnectingWallet, setIsConnectingWallet] = useState<boolean>(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [walletTab, setWalletTab] = useState<'metamask' | 'agent'>('metamask');
+  const [wcCopied, setWcCopied] = useState<boolean>(false);
+  const [wcUri, setWcUri] = useState<string>(
+    'wc:mobius-monad-v2@2?relay-protocol=irn&symKey=9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b'
+  );
+
   const [environment, setEnvironment] = useState<EnvironmentType>('sandbox');
   const [backendLive, setBackendLive] = useState<boolean>(true);
   const [copiedReceipt, setCopiedReceipt] = useState(false);
@@ -85,34 +108,111 @@ export function MobiusApp() {
     currentBuffer = +(Number(currentBuffer) + 11.2).toFixed(1);
   }
 
-  // Check backend health on mount
+  // Check backend health and restore wallet connection on mount
   useEffect(() => {
     api.health()
       .then((res) => setBackendLive(res.status === 'ok'))
       .catch(() => setBackendLive(false));
+
+    setIsMetaMaskDetected(isMetaMaskAvailable());
+
+    // Restore prior connection if exists
+    checkExistingConnection().then(async (savedAddr) => {
+      if (savedAddr) {
+        setRawAddress(savedAddr);
+        setWalletAddress(formatAddress(savedAddr));
+        setWalletConnected(true);
+        const provider = getEthereumProvider();
+        if (provider) {
+          try {
+            const cIdHex = await provider.request({ method: 'eth_chainId' });
+            setChainId(parseInt(cIdHex, 16));
+            const balHex = await provider.request({ method: 'eth_getBalance', params: [savedAddr, 'latest'] });
+            setWalletBalance(`${formatBalance(balHex)} MON`);
+          } catch {}
+        }
+      }
+    });
+
+    const provider = getEthereumProvider();
+    if (provider && provider.on) {
+      const onAccounts = (accounts: string[]) => {
+        if (accounts && accounts.length > 0) {
+          const acc = accounts[0];
+          setRawAddress(acc);
+          setWalletAddress(formatAddress(acc));
+          setWalletConnected(true);
+          provider.request({ method: 'eth_getBalance', params: [acc, 'latest'] })
+            .then((b: string) => setWalletBalance(`${formatBalance(b)} MON`))
+            .catch(() => {});
+        } else {
+          disconnectWallet();
+          setRawAddress(null);
+          setWalletAddress('');
+          setWalletConnected(false);
+          setWalletBalance('0.000 MON');
+        }
+      };
+
+      const onChain = (cIdHex: string) => {
+        setChainId(parseInt(cIdHex, 16));
+      };
+
+      provider.on('accountsChanged', onAccounts);
+      provider.on('chainChanged', onChain);
+
+      return () => {
+        if (provider.removeListener) {
+          provider.removeListener('accountsChanged', onAccounts);
+          provider.removeListener('chainChanged', onChain);
+        }
+      };
+    }
   }, []);
 
-  // Connect MetaMask or Rabby
+  // Connect MetaMask Real Wallet
   const handleConnectWallet = async () => {
-    if (typeof window !== 'undefined' && (window as any).ethereum) {
-      try {
-        const accounts = await (window as any).ethereum.request({
-          method: 'eth_requestAccounts',
-        });
-        if (accounts && accounts.length > 0) {
-          const addr = accounts[0];
-          setWalletAddress(`${addr.slice(0, 6)}...${addr.slice(-4)}`);
-          setWalletConnected(true);
-          setModalType(null);
-          return;
+    setIsConnectingWallet(true);
+    setWalletError(null);
+    try {
+      const res = await connectMetaMask();
+      if (res.success && res.address) {
+        setRawAddress(res.address);
+        setWalletAddress(res.shortAddress || formatAddress(res.address));
+        setWalletConnected(true);
+        setChainId(res.chainId ?? null);
+        setWalletBalance(`${res.balance || '0.000'} MON`);
+        setModalType(null);
+      } else {
+        if (res.error === 'METAMASK_NOT_INSTALLED') {
+          setWalletError('MetaMask extension not found in your browser. Install MetaMask or open in a Web3 browser.');
+        } else {
+          setWalletError(res.error || 'Failed to connect wallet');
         }
-      } catch (e) {
-        console.warn('Wallet connect error:', e);
       }
+    } catch (e: any) {
+      setWalletError(e?.message || 'Wallet connection error');
+    } finally {
+      setIsConnectingWallet(false);
     }
-    setWalletAddress('0x71C8...A92F');
-    setWalletConnected(true);
+  };
+
+  // Disconnect Wallet
+  const handleDisconnect = () => {
+    disconnectWallet();
+    setRawAddress(null);
+    setWalletAddress('');
+    setWalletConnected(false);
+    setWalletBalance('0.000 MON');
     setModalType(null);
+  };
+
+  // Switch to Monad Testnet (Chain ID 10143)
+  const handleSwitchToMonad = async () => {
+    const ok = await switchToMonadTestnet();
+    if (ok) {
+      setChainId(MONAD_TESTNET_CHAIN_ID);
+    }
   };
 
   // Run Preflight Checklist
@@ -139,24 +239,25 @@ export function MobiusApp() {
   const handleAuthorize = async () => {
     setIsSigning(true);
     const mockHash = '0x7a8f9c1b4e2d3a5f6e7b8c9d0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b';
+    const signerAddress = rawAddress || '0x1234567890123456789012345678901234567890';
     try {
       const prep = await api.executionPrepare({
         planId: 'plan_demo_8245',
         candidateId: 'cand_repay_01',
-        chainId: 10143,
-        from: '0x1234567890123456789012345678901234567890',
+        chainId: chainId || 10143,
+        from: signerAddress,
         to: '0xA64c3bA49910baa01515360278AA2542AaAD0219',
         data: '0x',
         value: '0',
       });
 
-      if (typeof window !== 'undefined' && (window as any).ethereum) {
+      if (typeof window !== 'undefined' && (window as any).ethereum && rawAddress) {
         try {
           await (window as any).ethereum.request({
             method: 'personal_sign',
             params: [
-              `Mobius Risk Rehearsal Authorization\nAction: Repay 2,500 USDC\nTarget: Aave V3 Pool\nSnapshot: #82,451,200\nNetwork: Monad Mainnet Fork`,
-              walletAddress,
+              `Mobius Risk Rehearsal Authorization\nAction: Repay 2,500 USDC\nTarget: Aave V3 Pool\nSnapshot: #82,451,200\nNetwork: Monad Testnet (${chainId || 10143})`,
+              rawAddress,
             ],
           });
         } catch (e) {
@@ -951,11 +1052,14 @@ export function MobiusApp() {
       {/* ─── WALLET CONNECTION MODAL (Screen 1 in Playbook) ─── */}
       {modalType === 'wallet' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 text-gray-900 shadow-2xl border border-black/10">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 text-gray-900 shadow-2xl border border-black/10">
+            {/* Header */}
             <div className="flex items-center justify-between pb-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <MobiusLogo className="size-6" />
-                <h3 className="font-bold text-base text-gray-900">Connect your wallet</h3>
+                <h3 className="font-bold text-base text-gray-900">
+                  {walletConnected ? 'Wallet Connected' : 'Connect Your Wallet'}
+                </h3>
               </div>
               <button
                 type="button"
@@ -966,45 +1070,262 @@ export function MobiusApp() {
               </button>
             </div>
 
-            <div className="text-center py-4">
-              <h4 className="font-bold text-lg text-gray-900">Your DeFi positions. Under control.</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                Intelligent risk management and execution for leveraged DeFi positions.
-              </p>
-            </div>
-
-            <div className="space-y-3 pt-2">
+            {/* Modal Navigation Tabs */}
+            <div className="mt-4 flex rounded-xl bg-gray-100 p-1 border border-gray-200">
               <button
                 type="button"
-                onClick={handleConnectWallet}
-                className="w-full p-4 rounded-xl border border-gray-200 hover:border-[#836EF9] hover:bg-purple-50/40 flex items-center justify-between transition cursor-pointer group"
+                onClick={() => setWalletTab('metamask')}
+                className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  walletTab === 'metamask'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <div className="size-9 rounded-xl bg-amber-50 flex items-center justify-center text-xl">🦊</div>
-                  <div className="text-left">
-                    <div className="font-bold text-sm text-gray-900">MetaMask</div>
-                    <div className="text-xs text-gray-500">Browser wallet</div>
-                  </div>
-                </div>
-                <ChevronRight className="size-4 text-gray-400 group-hover:text-[#836EF9]" />
+                <span>🦊</span>
+                <span>MetaMask & Injected</span>
               </button>
-
               <button
                 type="button"
-                onClick={handleConnectWallet}
-                className="w-full p-4 rounded-xl border border-gray-200 hover:border-[#836EF9] hover:bg-purple-50/40 flex items-center justify-between transition cursor-pointer group"
+                onClick={() => setWalletTab('agent')}
+                className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  walletTab === 'agent'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <div className="size-9 rounded-xl bg-blue-50 flex items-center justify-center text-xl">🐰</div>
-                  <div className="text-left">
-                    <div className="font-bold text-sm text-gray-900">Rabby</div>
-                    <div className="text-xs text-gray-500">Browser wallet</div>
-                  </div>
-                </div>
-                <ChevronRight className="size-4 text-gray-400 group-hover:text-[#836EF9]" />
+                <span>🔗</span>
+                <span>AI Agent (WalletConnect v2)</span>
               </button>
             </div>
 
+            {/* ─── TAB 1: METAMASK & INJECTED ─── */}
+            {walletTab === 'metamask' && (
+              <div className="pt-4 space-y-4">
+                {walletConnected ? (
+                  /* Already Connected View */
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="font-bold text-xs text-emerald-800 uppercase tracking-wider">
+                            Active Session
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+                          {walletBalance}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between bg-white rounded-lg p-2.5 border border-emerald-100">
+                        <span className="font-mono text-xs text-gray-700 break-all select-all">
+                          {rawAddress || walletAddress}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (rawAddress) navigator.clipboard.writeText(rawAddress);
+                          }}
+                          className="ml-2 text-gray-400 hover:text-gray-700 cursor-pointer"
+                          title="Copy full address"
+                        >
+                          <Copy className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Network status & Monad Testnet Switcher */}
+                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500 font-medium">Network</span>
+                        {chainId === MONAD_TESTNET_CHAIN_ID ? (
+                          <span className="flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                            <span className="size-1.5 rounded-full bg-purple-600" />
+                            Monad Testnet #10143
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            <AlertTriangle className="size-3" />
+                            Chain #{chainId || 'Unknown'}
+                          </span>
+                        )}
+                      </div>
+
+                      {chainId !== MONAD_TESTNET_CHAIN_ID && (
+                        <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between gap-3">
+                          <p className="text-[11px] text-gray-500 leading-snug">
+                            Mobius requires Monad Testnet for live contract state & execution.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleSwitchToMonad}
+                            className="shrink-0 px-3 py-1.5 rounded-lg bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-xs transition cursor-pointer shadow-sm"
+                          >
+                            Switch to Monad
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Disconnect Button */}
+                    <button
+                      type="button"
+                      onClick={handleDisconnect}
+                      className="w-full py-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="size-3.5" />
+                      <span>Disconnect Wallet</span>
+                    </button>
+                  </div>
+                ) : (
+                  /* Connect New Wallet View */
+                  <div className="space-y-3">
+                    {walletError && (
+                      <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                        <AlertTriangle className="size-4 shrink-0" />
+                        <span>{walletError}</span>
+                      </div>
+                    )}
+
+                    {/* MetaMask Tile */}
+                    <button
+                      type="button"
+                      onClick={handleConnectWallet}
+                      disabled={isConnectingWallet}
+                      className="w-full p-4 rounded-xl border border-gray-200 hover:border-[#836EF9] hover:bg-purple-50/40 flex items-center justify-between transition cursor-pointer group disabled:opacity-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="size-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-2xl">
+                          🦊
+                        </div>
+                        <div className="text-left">
+                          <div className="font-bold text-sm text-gray-900 flex items-center gap-2">
+                            <span>MetaMask</span>
+                            {isMetaMaskDetected && (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                Installed
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {isMetaMaskDetected
+                              ? 'Connect browser extension or mobile app'
+                              : 'Not detected in this browser'}
+                          </div>
+                        </div>
+                      </div>
+                      {isConnectingWallet ? (
+                        <RefreshCw className="size-4 text-[#836EF9] animate-spin" />
+                      ) : (
+                        <ChevronRight className="size-4 text-gray-400 group-hover:text-[#836EF9]" />
+                      )}
+                    </button>
+
+                    {/* If MetaMask is not installed, show helper link */}
+                    {!isMetaMaskDetected && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 flex items-center justify-between text-xs">
+                        <span className="text-amber-800">Need MetaMask extension?</span>
+                        <a
+                          href="https://metamask.io/download/"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold text-[#836EF9] hover:underline"
+                        >
+                          <span>Install MetaMask</span>
+                          <ExternalLink className="size-3" />
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Rabby Tile */}
+                    <button
+                      type="button"
+                      onClick={handleConnectWallet}
+                      disabled={isConnectingWallet}
+                      className="w-full p-4 rounded-xl border border-gray-200 hover:border-[#836EF9] hover:bg-purple-50/40 flex items-center justify-between transition cursor-pointer group disabled:opacity-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="size-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-2xl">
+                          🐰
+                        </div>
+                        <div className="text-left">
+                          <div className="font-bold text-sm text-gray-900">Rabby Wallet</div>
+                          <div className="text-xs text-gray-500">Browser extension (EVM compatible)</div>
+                        </div>
+                      </div>
+                      <ChevronRight className="size-4 text-gray-400 group-hover:text-[#836EF9]" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ─── TAB 2: AI AGENT & WALLETCONNECT V2 ─── */}
+            {walletTab === 'agent' && (
+              <div className="pt-4 space-y-4">
+                <div className="rounded-xl border border-[#836EF9]/30 bg-purple-50/50 p-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-[#836EF9]" />
+                    <h4 className="font-bold text-xs text-purple-950 uppercase tracking-wider">
+                      Autonomous dApp Access for AI
+                    </h4>
+                  </div>
+                  <p className="mt-1 text-xs text-purple-900/80 leading-relaxed">
+                    AI agents connect to Mobius via WalletConnect v2 to autonomously evaluate health factors, run preflight revalidations, and auto-sign debt mitigations without popup delays.
+                  </p>
+                </div>
+
+                {/* Pairing URI Box */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-gray-700">WalletConnect URI for Agent</label>
+                    <span className="text-[10px] text-gray-400 font-mono">v2.0 · EIP-155</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      value={wcUri}
+                      className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-mono text-gray-700 pr-10 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(wcUri);
+                        setWcCopied(true);
+                        setTimeout(() => setWcCopied(false), 2000);
+                      }}
+                      className="absolute right-2 top-2 p-1 text-gray-400 hover:text-[#836EF9] cursor-pointer"
+                      title="Copy WalletConnect URI"
+                    >
+                      {wcCopied ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Run script snippet */}
+                <div className="rounded-xl bg-gray-900 p-3.5 text-gray-200 text-xs font-mono space-y-1 overflow-x-auto">
+                  <div className="text-gray-400 text-[11px] mb-1"># Connect autonomous agent:</div>
+                  <div className="text-emerald-400">export PRIVATE_KEY="0x..."</div>
+                  <div className="text-purple-300">
+                    node scripts/wc-connect.js &quot;{wcUri.slice(0, 36)}...&quot; --chain-id 10143
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600">
+                  <div className="p-2 rounded-lg bg-gray-50 border border-gray-100 flex items-center gap-1.5">
+                    <Shield className="size-3.5 text-emerald-600 shrink-0" />
+                    <span>eth_sign blocked by default</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-gray-50 border border-gray-100 flex items-center gap-1.5">
+                    <FileText className="size-3.5 text-purple-600 shrink-0" />
+                    <span>~/.walletconnect-agent audit log</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Footer non-custodial guarantee */}
             <div className="mt-5 pt-4 border-t border-gray-100 text-[11px] text-gray-500 text-center space-y-1">
               <p>Connecting only grants account access. No transaction or spending approval is requested.</p>
               <p className="text-gray-400">Non-custodial · User-authorized execution · No private-key collection</p>

@@ -27,6 +27,16 @@ import {
 } from 'lucide-react';
 import { MobiusLogo } from '@/components/common/MobiusLogo';
 import {
+  connectMetaMask,
+  switchToMonadTestnet,
+  disconnectWallet,
+  formatAddress,
+  formatBalance,
+  isMetaMaskAvailable,
+  getEthereumProvider,
+  MONAD_TESTNET_CHAIN_ID,
+} from '@/lib/wallet';
+import {
   agenticPlanNatural,
   agenticRevalidate,
   executionPrepare,
@@ -73,13 +83,99 @@ export default function AgenticPage() {
   const [aaveLoading, setAaveLoading] = useState<boolean>(false);
 
   const [copied, setCopied] = useState<boolean>(false);
+  const [walletConnected, setWalletConnected] = useState<boolean>(false);
+  const [chainId, setChainId] = useState<number | null>(null);
+  const [walletBalance, setWalletBalance] = useState<string>('0.000 MON');
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
 
   useEffect(() => {
     const stored = getConnectedAccount();
     if (stored && stored !== account) {
       setAccount(stored);
+      setWalletConnected(true);
+    }
+
+    const provider = getEthereumProvider();
+    if (provider) {
+      provider
+        .request({ method: 'eth_accounts' })
+        .then(async (accounts: string[]) => {
+          if (accounts && accounts.length > 0) {
+            setAccount(accounts[0]);
+            setConnectedAccount(accounts[0]);
+            setWalletConnected(true);
+            const cIdHex = await provider.request({ method: 'eth_chainId' }).catch(() => null);
+            if (cIdHex) setChainId(parseInt(cIdHex, 16));
+            const balHex = await provider
+              .request({ method: 'eth_getBalance', params: [accounts[0], 'latest'] })
+              .catch(() => null);
+            if (balHex) setWalletBalance(`${formatBalance(balHex)} MON`);
+          }
+        })
+        .catch(() => {});
+
+      if (provider.on) {
+        const onAccounts = (accs: string[]) => {
+          if (accs.length > 0) {
+            setAccount(accs[0]);
+            setConnectedAccount(accs[0]);
+            setWalletConnected(true);
+          } else {
+            setAccount(DEFAULT_ACCOUNT);
+            setConnectedAccount();
+            setWalletConnected(false);
+          }
+        };
+        const onChain = (cIdHex: string) => setChainId(parseInt(cIdHex, 16));
+        provider.on('accountsChanged', onAccounts);
+        provider.on('chainChanged', onChain);
+        return () => {
+          if (provider.removeListener) {
+            provider.removeListener('accountsChanged', onAccounts);
+            provider.removeListener('chainChanged', onChain);
+          }
+        };
+      }
     }
   }, [account]);
+
+  const handleConnectWallet = async () => {
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const res = await connectMetaMask();
+      if (res.success && res.address) {
+        setAccount(res.address);
+        setConnectedAccount(res.address);
+        setWalletConnected(true);
+        setChainId(res.chainId ?? null);
+        setWalletBalance(`${res.balance || '0.000'} MON`);
+      } else {
+        if (res.error === 'METAMASK_NOT_INSTALLED') {
+          setError('MetaMask not detected. Please install MetaMask from metamask.io to connect.');
+        } else {
+          setError(res.error || 'Failed to connect MetaMask');
+        }
+      }
+    } catch (e: any) {
+      setError(e?.message || 'MetaMask connection error');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectWallet = () => {
+    disconnectWallet();
+    setConnectedAccount();
+    setAccount(DEFAULT_ACCOUNT);
+    setWalletConnected(false);
+    setWalletBalance('0.000 MON');
+  };
+
+  const handleSwitchToMonad = async () => {
+    const ok = await switchToMonadTestnet();
+    if (ok) setChainId(MONAD_TESTNET_CHAIN_ID);
+  };
 
   const copyText = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -343,7 +439,7 @@ export default function AgenticPage() {
                 Target: Monad Testnet #10143
               </span>
               <span className="font-mono text-xs text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                Connected: {getConnectedAccount() || 'Not connected'}
+                Connected: {walletConnected ? formatAddress(account) : 'Not connected'}
               </span>
             </div>
 
@@ -407,27 +503,59 @@ export default function AgenticPage() {
                     />
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      onClick={() => {
-                        setConnectedAccount(DEFAULT_ACCOUNT);
-                        setAccount(DEFAULT_ACCOUNT);
-                      }}
-                      className="flex-1 py-3 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-[#836EF9]/30"
-                    >
-                      <Wallet className="size-4" />
-                      <span>Connect Wallet</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setConnectedAccount();
-                        setAccount(DEFAULT_ACCOUNT);
-                      }}
-                      className="flex-1 py-3 rounded-xl border border-black/10 bg-white hover:bg-gray-50 text-gray-900 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
-                    >
-                      <X className="size-3.5" />
-                      <span>Disconnect</span>
-                    </button>
+                  <div className="space-y-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <button
+                        type="button"
+                        onClick={handleConnectWallet}
+                        disabled={isConnecting}
+                        className="flex-1 py-3 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-[#836EF9]/30 disabled:opacity-60"
+                      >
+                        <Wallet className="size-4" />
+                        <span>
+                          {walletConnected
+                            ? `MetaMask Connected (${formatAddress(account)})`
+                            : isConnecting
+                            ? 'Connecting MetaMask...'
+                            : 'Connect with MetaMask'}
+                        </span>
+                      </button>
+                      {walletConnected && (
+                        <button
+                          type="button"
+                          onClick={handleDisconnectWallet}
+                          className="py-3 px-4 rounded-xl border border-black/10 bg-white hover:bg-gray-50 text-gray-900 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                        >
+                          <X className="size-3.5" />
+                          <span>Disconnect</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Network Status & Monad Switcher */}
+                    {walletConnected && (
+                      <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-black/5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">Balance:</span>
+                          <span className="font-mono font-bold text-gray-800">{walletBalance}</span>
+                        </div>
+                        {chainId === MONAD_TESTNET_CHAIN_ID ? (
+                          <span className="flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                            <span className="size-1.5 rounded-full bg-purple-600" />
+                            Monad Testnet #10143
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleSwitchToMonad}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded border border-amber-200 transition cursor-pointer"
+                          >
+                            <AlertTriangle className="size-3 text-amber-600" />
+                            <span>Switch to Monad Testnet</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div>

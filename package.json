@@ -21,7 +21,10 @@
     "test:integration": "node scripts/test-monad-integration.mjs"
   },
   "dependencies": {
+    "@walletconnect/core": "^2.26.0",
+    "@walletconnect/web3wallet": "^1.16.1",
     "dotenv": "^16.4.5",
+    "ethers": "^6.17.0",
     "framer-motion": "^14.9.0",
     "gsap": "^3.15.0",
     "lucide-react": "^1.65.0",

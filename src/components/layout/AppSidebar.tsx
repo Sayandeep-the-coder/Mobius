@@ -87,10 +87,18 @@ export function AppSidebar({
               </span>
             </div>
           </Link>
-          <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Connected</span>
-          </div>
+          <button
+            type="button"
+            onClick={onConnectWallet}
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border transition cursor-pointer ${
+              walletConnected
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+            }`}
+          >
+            <span className={`size-1.5 rounded-full ${walletConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span>{walletConnected ? 'Connected' : 'Connect Wallet'}</span>
+          </button>
         </div>
 
         {/* ─── Primary 5 Sections (Matching Playbook Architecture) ─── */}
@@ -180,18 +188,21 @@ export function AppSidebar({
             <Wallet className="size-3.5 text-gray-400" />
             <span className="uppercase tracking-wider text-[10px] font-bold">WALLET</span>
           </div>
-          <div
+          <button
+            type="button"
             onClick={walletConnected ? handleCopy : onConnectWallet}
             className="group flex items-center gap-1.5 font-mono text-gray-200 bg-white/5 hover:bg-white/10 px-2 py-1 rounded-lg border border-white/5 transition cursor-pointer"
-            title="Click to copy address or reconnect"
+            title={walletConnected ? 'Click to copy address' : 'Click to connect wallet'}
           >
-            <span>{walletAddress}</span>
-            {copied ? (
-              <Check className="size-3 text-emerald-400" />
-            ) : (
-              <Copy className="size-3 text-gray-400 group-hover:text-white transition" />
+            <span>{walletConnected ? walletAddress : 'Connect'}</span>
+            {walletConnected && (
+              copied ? (
+                <Check className="size-3 text-emerald-400" />
+              ) : (
+                <Copy className="size-3 text-gray-400 group-hover:text-white transition" />
+              )
             )}
-          </div>
+          </button>
         </div>
 
         {/* Environment Pill */}

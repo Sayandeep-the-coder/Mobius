@@ -2,8 +2,9 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, Lock, CheckCircle2, ShieldCheck, ArrowRight, Database } from 'lucide-react';
+import { X, Search, Lock, CheckCircle2, ShieldCheck, ArrowRight, Database, Wallet } from 'lucide-react';
 import { MobiusLogo } from '@/components/common/MobiusLogo';
+import { connectMetaMask, formatAddress } from '@/lib/wallet';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -147,6 +148,21 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'analyze' }: AuthModal
                     <div className="absolute right-3 top-3 text-gray-500">
                       <Search className="size-4" />
                     </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await connectMetaMask();
+                        if (res.success && res.address) {
+                          setAddress(res.address);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs text-[#A594FD] hover:text-white transition cursor-pointer font-medium"
+                    >
+                      <span>🦊</span>
+                      <span>Auto-fill from MetaMask</span>
+                    </button>
                   </div>
                 </div>
 

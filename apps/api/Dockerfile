@@ -14,4 +14,5 @@ RUN npm run build
 
 EXPOSE 8787
 
+# Render sets PORT automatically
 CMD ["npm", "start"]

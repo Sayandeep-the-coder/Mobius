@@ -12,5 +12,8 @@
     "start": "cd apps/api && npm start",
     "worker": "cd apps/api && npm run worker",
     "test": "cd apps/api && npm test"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

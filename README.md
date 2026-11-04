@@ -420,7 +420,7 @@ npm test
 
 ### Local Development
 
-See the section below for local setup. For production/deployment on Oracle Cloud + Vercel, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
+See the section below for local setup. For production/deployment on Render + Vercel, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ### 1. Prerequisites (Local Development)
 

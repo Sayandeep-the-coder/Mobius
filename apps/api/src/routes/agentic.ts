@@ -69,20 +69,36 @@ const revalidateSchema = z.object({
 export const agenticRoutes = Router();
 
 // Initialize LLM adapter (optional — mock provider works without API key)
-const llmEnabled = process.env.LLM_ENABLED === "true";
-const llmProvider = (() => {
+// Providers are created per-request so LLM_ENABLED can be toggled at runtime
+function createIntentParser() {
+  const enabled = process.env.LLM_ENABLED === "true";
   const provider = process.env.LLM_PROVIDER ?? "mock";
-  if (provider === "groq") {
-    return new GroqLLMProvider({ enabled: llmEnabled });
-  }
-  return new MockLLMProvider({ enabled: llmEnabled });
-})();
-const intentParser = new IntentParser(llmProvider);
-const candidateProposer = new CandidateProposer(llmProvider, [
-  "execute_swap",
-  "hold_defer",
-]);
-const explainer = new Explainer(llmProvider);
+  const llmProvider =
+    provider === "groq"
+      ? new GroqLLMProvider({ enabled })
+      : new MockLLMProvider({ enabled });
+  return new IntentParser(llmProvider);
+}
+
+function createCandidateProposer() {
+  const enabled = process.env.LLM_ENABLED === "true";
+  const provider = process.env.LLM_PROVIDER ?? "mock";
+  const llmProvider =
+    provider === "groq"
+      ? new GroqLLMProvider({ enabled })
+      : new MockLLMProvider({ enabled });
+  return new CandidateProposer(llmProvider, ["execute_swap", "hold_defer"]);
+}
+
+function createExplainer() {
+  const enabled = process.env.LLM_ENABLED === "true";
+  const provider = process.env.LLM_PROVIDER ?? "mock";
+  const llmProvider =
+    provider === "groq"
+      ? new GroqLLMProvider({ enabled })
+      : new MockLLMProvider({ enabled });
+  return new Explainer(llmProvider);
+}
 
 const orchestration = new OrchestrationService();
 
@@ -109,7 +125,7 @@ agenticRoutes.post("/plan", async (req, res) => {
     const response: AgenticPlanResponse = await orchestration.plan(client, input, targetAddress);
 
     // LLM explains deterministic results (optional, falls back to deterministic explainer)
-    const humanExplanation = await explainer.explain(
+    const humanExplanation = await createExplainer().explain(
       response.candidates.map((c) => ({
         candidateId: c.candidateId,
         strategy: c.strategy,
@@ -123,7 +139,7 @@ agenticRoutes.post("/plan", async (req, res) => {
     res.json({
       ...response,
       humanExplanation,
-      llmUsed: llmEnabled,
+      llmUsed: process.env.LLM_ENABLED === "true",
     });
   } catch (err) {
     res.status(500).json({ error: "Planning failed", message: String(err) });
@@ -135,7 +151,7 @@ agenticRoutes.post("/plan", async (req, res) => {
  * All LLM output is Zod-validated before reaching the planner.
  */
 agenticRoutes.post("/plan/natural", async (req, res) => {
-  if (!llmEnabled) {
+  if (process.env.LLM_ENABLED !== "true") {
     res.status(400).json({
       error: "LLM not enabled. Set LLM_ENABLED=true to use natural language planning.",
     });
@@ -153,7 +169,10 @@ agenticRoutes.post("/plan/natural", async (req, res) => {
 
   try {
     // LLM parses natural language into typed request — Zod validates everything
-    const typedRequest = await intentParser.parseAndValidate(input.objective);
+    const typedRequest = await createIntentParser().parseAndValidate(input.objective, {
+      chainId: input.chainId,
+      account: input.account as `0x${string}`,
+    });
 
     // Merge in explicitly provided fields (account, chainId, constraints take precedence)
     const mergedRequest: AgenticPlanRequest = {
@@ -185,7 +204,7 @@ agenticRoutes.post("/plan/natural", async (req, res) => {
 
     // LLM proposes strategies (filtered to allowed deterministic templates)
     const allowedStrategies = ["execute_swap", "hold_defer"];
-    const proposedStrategies = await candidateProposer.propose(
+    const proposedStrategies = await createCandidateProposer().propose(
       input.objective,
       {},
       allowedStrategies
@@ -198,7 +217,7 @@ agenticRoutes.post("/plan/natural", async (req, res) => {
     );
 
     // LLM explains deterministic results
-    const humanExplanation = await explainer.explain(
+    const humanExplanation = await createExplainer().explain(
       response.candidates.map((c) => ({
         candidateId: c.candidateId,
         strategy: c.strategy,
@@ -285,8 +304,8 @@ agenticRoutes.post("/revalidate", async (req, res) => {
   };
 
   // LLM explains revalidation result (optional)
-  if (llmEnabled) {
-    const explanation = await explainer.explain([
+  if (process.env.LLM_ENABLED === "true") {
+    const explanation = await createExplainer().explain([
       {
         candidateId,
         strategy: "revalidation",

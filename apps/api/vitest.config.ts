@@ -12,6 +12,7 @@ export default defineConfig({
       "@mobius/contracts-abi": path.resolve(__dirname, "../../packages/contracts-abi/src/index.ts"),
       "@mobius/simulation": path.resolve(__dirname, "../../packages/simulation/src/index.ts"),
       "@mobius/policies": path.resolve(__dirname, "../../packages/policies/src/index.ts"),
+      "@mobius/llm-adapter": path.resolve(__dirname, "../../packages/llm-adapter/src/index.ts"),
     },
   },
 });

@@ -825,4 +825,72 @@ Before expanding the product (API Hub, MIP integrations, private settlement), fr
 
 ---
 
-**End of project memory.** This file should be treated as the source of truth for architectural constraints, chain IDs, file ownership, interfaces, non-goals, and financial engine specifications across all sessions.
+## 21. LLM Integration Architecture
+
+**Source:** Mobius One-Day Build Playbook — Architecture Revision 3, November 4, 2026  
+**Status:** Implemented with mock provider; OpenAI/Anthropic swap-ready
+
+### 21.1 LLM Role: Optional and Sandboxed
+
+The LLM is **never trusted** with:
+- Calculating Health Factors, liquidation distance, or carry
+- Deciding whether a simulation passed or reverted
+- Guessing oracle prices or protocol parameters
+- Overriding hard policy constraints
+- Signing or broadcasting transactions
+
+The LLM is **allowed** to:
+- Parse natural language into typed `AgenticPlanRequest` (validated by Zod)
+- Propose candidate strategies (filtered to allowed deterministic templates)
+- Explain deterministic results in human-readable language
+
+### 21.2 Package: `packages/llm-adapter/`
+
+| File | Purpose |
+|------|---------|
+| `src/types.ts` | `LLMProvider` interface, `LLMConfig` |
+| `src/mock-provider.ts` | Mock provider — works without API key (default) |
+| `src/intent-parser.ts` | Parses NL → typed request, Zod-validates, merges explicit chainId/account |
+| `src/candidate-proposer.ts` | Proposes strategies, falls back to deterministic defaults |
+| `src/explainer.ts` | Explains results, falls back to deterministic explainer |
+
+### 21.3 LLM Configuration (`.env`)
+
+```
+LLM_ENABLED=false        # Set to "true" to enable LLM features
+LLM_PROVIDER=mock        # mock \| openai \| anthropic
+LLM_MODEL=mock-default
+LLM_API_KEY=             # Only needed for openai/anthropic providers
+```
+
+**Default: disabled.** The mock provider works without any API key and returns deterministic, safe defaults.
+
+### 21.4 API Endpoints
+
+| Endpoint | Method | LLM Role |
+|----------|--------|----------|
+| `POST /v1/agentic/plan` | POST | LLM explains deterministic results (optional) |
+| `POST /v1/agentic/plan/natural` | POST | LLM parses natural language → typed request (Zod-validated) |
+| `POST /v1/agentic/revalidate` | POST | LLM explains revalidation result (optional) |
+
+### 21.5 Safety Guarantees
+
+1. **Zod validation:** All LLM output passes through Zod schema before reaching the planner
+2. **Strategy filtering:** LLM-proposed strategies are filtered to allowed deterministic templates only
+3. **Fallback on failure:** If LLM is disabled or fails, deterministic defaults are used
+4. **No trusted calculations:** LLM never produces gas estimates, state deltas, or pass/revert verdicts
+5. **Deterministic explainer fallback:** If LLM explanation fails, deterministic explainer takes over
+
+### 21.6 Example Natural Language Flow
+
+User says: *"Execute swap on 0x1234...7890 with 100 ETH and minOut 90"*
+
+1. LLM parses → `{ objective: { type: "execute_swap", description: "..." }, context: { parameters: { amountIn: "100", minOut: "90", target: "0x..." } } }`
+2. Zod validates → rejects if chainId/account missing (caller provides them)
+3. Deterministic planner simulates swap against pinned snapshot
+4. Policy evaluator checks minAmountOut constraint
+5. LLM explains: "✅ 1 passed: execute_swap — Swap passed against block 1000"
+
+---
+
+**End of project memory.** This file should be treated as the source of truth for architectural constraints, chain IDs, file ownership, interfaces, non-goals, financial engine specifications, and LLM integration across all sessions.

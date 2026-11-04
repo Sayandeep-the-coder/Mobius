@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -30,7 +30,9 @@ import {
   agenticPlanNatural,
   agenticRevalidate,
   executionPrepare,
+  getConnectedAccount,
   preflightCheck,
+  setConnectedAccount,
   aaveMarket,
   aaveSupplyPreflight,
   type AgenticPlanResponse,
@@ -42,6 +44,8 @@ import {
 
 type StepNumber = 1 | 2 | 3 | 4 | 5;
 
+const DEFAULT_ACCOUNT = '0x1234567890123456789012345678901234567890';
+
 export default function AgenticPage() {
   const [step, setStep] = useState<StepNumber>(1);
   const [loading, setLoading] = useState<boolean>(false);
@@ -50,7 +54,7 @@ export default function AgenticPage() {
 
   // Form input
   const [account, setAccount] = useState<string>(
-    '0x1234567890123456789012345678901234567890'
+    getConnectedAccount() || DEFAULT_ACCOUNT
   );
   const [objective, setObjective] = useState<string>(
     'Execute swap on 0xA64c3bA49910baa01515360278AA2542AaAD0219 with 100 MON minOut 90'
@@ -69,6 +73,13 @@ export default function AgenticPage() {
   const [aaveLoading, setAaveLoading] = useState<boolean>(false);
 
   const [copied, setCopied] = useState<boolean>(false);
+
+  useEffect(() => {
+    const stored = getConnectedAccount();
+    if (stored && stored !== account) {
+      setAccount(stored);
+    }
+  }, [account]);
 
   const copyText = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -331,6 +342,9 @@ export default function AgenticPage() {
               <span className="font-mono text-xs text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
                 Target: Monad Testnet #10143
               </span>
+              <span className="font-mono text-xs text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                Connected: {getConnectedAccount() || 'Not connected'}
+              </span>
             </div>
 
             <div className="flex items-center gap-3">
@@ -391,6 +405,29 @@ export default function AgenticPage() {
                       onChange={(e) => setAccount(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 text-xs font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#836EF9]"
                     />
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={() => {
+                        setConnectedAccount(DEFAULT_ACCOUNT);
+                        setAccount(DEFAULT_ACCOUNT);
+                      }}
+                      className="flex-1 py-3 rounded-xl bg-[#836EF9] hover:bg-[#6E54FF] text-white font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-[#836EF9]/30"
+                    >
+                      <Wallet className="size-4" />
+                      <span>Connect Wallet</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setConnectedAccount();
+                        setAccount(DEFAULT_ACCOUNT);
+                      }}
+                      className="flex-1 py-3 rounded-xl border border-black/10 bg-white hover:bg-gray-50 text-gray-900 font-semibold text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      <X className="size-3.5" />
+                      <span>Disconnect</span>
+                    </button>
                   </div>
 
                   <div>

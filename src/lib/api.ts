@@ -9,6 +9,29 @@ const API_BASE_URL =
     ? 'http://localhost:8787'
     : '');
 
+let connectedAccount: string | undefined;
+
+export function setConnectedAccount(address?: string) {
+  connectedAccount = address;
+  if (typeof window !== 'undefined') {
+    if (address) {
+      localStorage.setItem('mobius_wallet_address', address);
+    } else {
+      localStorage.removeItem('mobius_wallet_address');
+    }
+  }
+}
+
+export function getConnectedAccount(): string | undefined {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('mobius_wallet_address');
+    if (stored) {
+      connectedAccount = stored;
+    }
+  }
+  return connectedAccount;
+}
+
 async function fetchJson<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
   const response = await fetch(url, {

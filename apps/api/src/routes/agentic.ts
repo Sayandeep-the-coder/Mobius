@@ -15,6 +15,7 @@ import {
   CandidateProposer,
   Explainer,
   MockLLMProvider,
+  GroqLLMProvider,
 } from "@mobius/llm-adapter";
 
 const agenticPlanSchema = z.object({
@@ -69,7 +70,13 @@ export const agenticRoutes = Router();
 
 // Initialize LLM adapter (optional — mock provider works without API key)
 const llmEnabled = process.env.LLM_ENABLED === "true";
-const llmProvider = new MockLLMProvider({ enabled: llmEnabled });
+const llmProvider = (() => {
+  const provider = process.env.LLM_PROVIDER ?? "mock";
+  if (provider === "groq") {
+    return new GroqLLMProvider({ enabled: llmEnabled });
+  }
+  return new MockLLMProvider({ enabled: llmEnabled });
+})();
 const intentParser = new IntentParser(llmProvider);
 const candidateProposer = new CandidateProposer(llmProvider, [
   "execute_swap",

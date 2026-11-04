@@ -256,6 +256,58 @@ Three-person team, three branches, no overlapping file ownership:
 - No automatic relaxation of user slippage, minimum output, debt, collateral, or spending constraints
 - No autonomous transfer of funds without explicit user-authorized limits and signature
 
+## 🚀 How to Set Up in Your Device
+
+Follow these steps to get Mobius running locally on your machine:
+
+### 1. Prerequisites
+Ensure you have the following installed:
+- [Node.js](https://nodejs.org/) (`v20.x` or `v22.x LTS` recommended)
+- [Git](https://git-scm.com/)
+- [npm](https://www.npmjs.com/) (bundled with Node.js) or [bun](https://bun.sh/)
+- *(Optional for smart contract workflows)*: [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`, `anvil`)
+
+### 2. Clone the Repository
+Clone the repository to your local workspace:
+```bash
+git clone https://github.com/Sayandeep-the-coder/Mobius.git
+cd Mobius
+```
+
+### 3. Install Dependencies
+Install all required project packages:
+```bash
+npm install
+```
+
+### 4. Configure Environment (Optional)
+If connecting to custom RPC endpoints or Monad Testnet, you can create a `.env.local` file:
+```env
+NEXT_PUBLIC_MONAD_RPC_URL=https://testnet-rpc.monad.xyz
+NEXT_PUBLIC_CHAIN_ID=10143
+```
+
+### 5. Start the Development Server
+Launch the Next.js local server with Turbopack:
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser to view the interactive Mobius risk rehearsal platform.
+
+### 6. Build for Production
+To generate and run an optimized production build:
+```bash
+npm run build
+npm run start
+```
+
+### 7. Code Quality & Type Check
+Verify type safety and linting:
+```bash
+npm run lint
+```
+
 ## Toolchain
 
 - Node.js 22 LTS+
